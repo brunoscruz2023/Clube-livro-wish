@@ -1,0 +1,148 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 3. Primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      // Prioritize static check for owner email to avoid get() performance hits in list queries
+      return isSignedIn() && (
+        request.auth.token.email == 'brunoscruz@gmail.com' || 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN')
+      );
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function belongsToApartment(apartmentId) {
+      return isSignedIn() && getUserData().apartmentId == apartmentId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // 4. Entities Validations
+    function isValidBook(data) {
+      return data.keys().hasAll(['title', 'author', 'status', 'active', 'createdAt', 'updatedAt']) &&
+             data.keys().size() >= 6 &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+             data.author is string && data.author.size() > 0 && data.author.size() <= 200 &&
+             data.status in ['AVAILABLE', 'LOANED', 'INACTIVE'] &&
+             data.active is bool;
+    }
+
+    function isValidLoan(data) {
+      return data.keys().hasAll(['bookId', 'apartmentId', 'borrowerUserId', 'loanedAt', 'dueAt', 'renewalCount', 'status', 'createdAt', 'updatedAt']) &&
+             data.keys().size() >= 9 &&
+             data.bookId is string && isValidId(data.bookId) &&
+             data.apartmentId is string && isValidId(data.apartmentId) &&
+             data.borrowerUserId is string && isValidId(data.borrowerUserId) &&
+             data.loanedAt is timestamp &&
+             data.dueAt is timestamp &&
+             data.renewalCount is int && data.renewalCount >= 0 && data.renewalCount <= 3 &&
+             data.status in ['ACTIVE', 'RETURNED'];
+    }
+
+    function isValidLocation(data) {
+      return data.keys().hasAll(['name', 'active', 'createdAt', 'updatedAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.active is bool;
+    }
+
+    // 5. Collection Rules
+
+    match /locations/{locationId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /condos/{condoId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /blocks/{blockId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /apartments/{apartmentId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && (
+        (request.auth.uid == userId && (
+          // Only allow changing specific fields
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'apartmentId', 'updatedAt', 'residencyNote'])
+        )) ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /books/{bookId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+      allow update: if (
+        isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'availableLocationType', 'availableLocationBlockId', 'availableLocationLabel']) &&
+        incoming().status in ['AVAILABLE', 'LOANED'] &&
+        incoming().updatedAt == request.time
+      );
+    }
+
+    match /book_loans/{loanId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (
+        isValidLoan(incoming()) &&
+        belongsToApartment(incoming().apartmentId) &&
+        incoming().borrowerUserId == request.auth.uid &&
+        incoming().status == 'ACTIVE' &&
+        incoming().loanedAt == request.time &&
+        incoming().renewalCount == 0 &&
+        get(/databases/$(database)/documents/books/$(incoming().bookId)).data.status == 'AVAILABLE'
+      );
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        (
+          belongsToApartment(existing().apartmentId) &&
+          existing().status == 'ACTIVE' &&
+          (
+            // Action: Renew
+            (incoming().diff(existing()).affectedKeys().hasOnly(['renewalCount', 'dueAt', 'lastRenewedAt', 'updatedAt']) &&
+             incoming().renewalCount == existing().renewalCount + 1 &&
+             incoming().renewalCount <= 3 &&
+             incoming().lastRenewedAt == request.time) ||
+            // Action: Return
+            (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'returnedAt', 'returnLocationType', 'returnLocationBlockId', 'returnLocationLabel', 'updatedAt']) &&
+             incoming().status == 'RETURNED' &&
+             incoming().returnedAt == request.time)
+          )
+        )
+      );
+      allow delete: if isAdmin();
+    }
+  }
+}

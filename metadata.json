@@ -1,0 +1,6 @@
+{
+  "name": "Clube do Livro",
+  "description": "Sistema de controle de empréstimo de livros para condomínios residenciais.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": []
+}

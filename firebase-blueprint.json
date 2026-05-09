@@ -1,0 +1,144 @@
+{
+  "entities": {
+    "Condo": {
+      "title": "Condo",
+      "description": "A residential condominium.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "active"]
+    },
+    "Block": {
+      "title": "Block",
+      "description": "A block within a condominium.",
+      "type": "object",
+      "properties": {
+        "condoId": { "type": "string" },
+        "name": { "type": "string" },
+        "qrToken": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "active"]
+    },
+    "Apartment": {
+      "title": "Apartment",
+      "description": "A residential unit.",
+      "type": "object",
+      "properties": {
+        "condoId": { "type": "string" },
+        "blockId": { "type": "string" },
+        "number": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["number", "active"]
+    },
+    "User": {
+      "title": "User",
+      "description": "App user (resident or admin).",
+      "type": "object",
+      "properties": {
+        "apartmentId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN", "RESIDENT"] },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "email", "role", "active"]
+    },
+    "Location": {
+      "title": "Location",
+      "description": "A fixed location for book pick-up/drop-off.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "active"]
+    },
+    "Book": {
+      "title": "Book",
+      "description": "A physical book in the library.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "author": { "type": "string" },
+        "isbn": { "type": "string" },
+        "barcode": { "type": "string" },
+        "category": { "type": "string" },
+        "status": { "type": "string", "enum": ["AVAILABLE", "LOANED", "INACTIVE"] },
+        "availableLocationType": { "type": "string", "enum": ["BLOCK_ENTRANCE", "APARTMENT", "FIXED_POINT", "OTHER"] },
+        "availableLocationBlockId": { "type": "string" },
+        "availableLocationLabel": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "author", "status"]
+    },
+    "BookLoan": {
+      "title": "BookLoan",
+      "description": "A record of a book loan.",
+      "type": "object",
+      "properties": {
+        "bookId": { "type": "string" },
+        "apartmentId": { "type": "string" },
+        "borrowerUserId": { "type": "string" },
+        "loanedAt": { "type": "string", "format": "date-time" },
+        "dueAt": { "type": "string", "format": "date-time" },
+        "renewalCount": { "type": "integer" },
+        "lastRenewedAt": { "type": "string", "format": "date-time" },
+        "returnedAt": { "type": "string", "format": "date-time" },
+        "returnLocationType": { "type": "string", "enum": ["BLOCK_ENTRANCE", "APARTMENT", "FIXED_POINT", "OTHER"] },
+        "returnLocationBlockId": { "type": "string" },
+        "returnLocationLabel": { "type": "string" },
+        "status": { "type": "string", "enum": ["ACTIVE", "RETURNED"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["bookId", "apartmentId", "borrowerUserId", "loanedAt", "dueAt", "renewalCount", "status"]
+    }
+  },
+  "firestore": {
+    "locations": {
+      "schema": "Location",
+      "description": "Collection of fixed locations."
+    },
+    "condos": {
+      "schema": "Condo",
+      "description": "Collection of condominiums."
+    },
+    "blocks": {
+      "schema": "Block",
+      "description": "Collection of blocks."
+    },
+    "apartments": {
+      "schema": "Apartment",
+      "description": "Collection of apartments."
+    },
+    "users": {
+      "schema": "User",
+      "description": "Collection of users."
+    },
+    "books": {
+      "schema": "Book",
+      "description": "Collection of physical books."
+    },
+    "book_loans": {
+      "schema": "BookLoan",
+      "description": "Collection of loan transactions."
+    }
+  }
+}
