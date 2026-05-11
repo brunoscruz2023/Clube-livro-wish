@@ -342,27 +342,59 @@ export function Admin() {
         </div>
       </header>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-px">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => {
-              setActiveTab(tab.id as any);
-              setShowAddForm(false);
-              setIsEditing(null);
-            }}
-            className={cn(
-              "flex items-center gap-2 border-b-2 px-6 py-4 text-sm font-semibold transition-all",
-              activeTab === tab.id 
-                ? "border-indigo-600 text-indigo-600" 
-                : "border-transparent text-slate-500 hover:text-slate-900"
-            )}
-          >
-            <tab.icon className="h-4 w-4" />
-            {tab.label}
-          </button>
-        ))}
+      {/* Tabs Navigation */}
+      <div className="relative">
+        {/* Mobile Dropdown */}
+        <div className="sm:hidden">
+          <label htmlFor="admin-tabs" className="sr-only">Selecione a categoria</label>
+          <div className="relative">
+            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-indigo-600">
+              {tabs.find(t => t.id === activeTab)?.icon && React.createElement(tabs.find(t => t.id === activeTab)!.icon, { className: "h-5 w-5" })}
+            </div>
+            <select
+              id="admin-tabs"
+              value={activeTab}
+              onChange={(e) => {
+                setActiveTab(e.target.value as any);
+                setShowAddForm(false);
+                setIsEditing(null);
+              }}
+              className="block w-full rounded-2xl border border-slate-200 bg-white py-4 pl-12 pr-10 text-base font-bold text-slate-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 appearance-none"
+            >
+              {tabs.map((tab) => (
+                <option key={tab.id} value={tab.id}>
+                  {tab.label}
+                </option>
+              ))}
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400">
+              <ChevronRight className="h-5 w-5 rotate-90" />
+            </div>
+          </div>
+        </div>
+
+        {/* Desktop Tabs */}
+        <div className="hidden sm:flex items-center gap-2 border-b border-slate-200 pb-px overflow-x-auto no-scrollbar">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => {
+                setActiveTab(tab.id as any);
+                setShowAddForm(false);
+                setIsEditing(null);
+              }}
+              className={cn(
+                "flex items-center gap-2 border-b-2 px-6 py-4 text-sm font-semibold transition-all whitespace-nowrap",
+                activeTab === tab.id 
+                  ? "border-indigo-600 text-indigo-600" 
+                  : "border-transparent text-slate-500 hover:text-slate-900"
+              )}
+            >
+              <tab.icon className="h-4 w-4" />
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="rounded-3xl bg-white border border-slate-200 shadow-sm overflow-hidden">

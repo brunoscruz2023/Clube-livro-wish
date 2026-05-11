@@ -74,9 +74,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             updateDoc(userRef, { role: 'ADMIN', active: true }).catch(e => console.error("Admin sync failed", e));
           }
 
+          // Resolve human-readable residency info
+          let resolvedApto = undefined;
+          let resolvedBlock = undefined;
+
+          if (data.apartmentId) {
+            try {
+              const aptoDoc = await getDoc(doc(db, 'apartments', data.apartmentId));
+              if (aptoDoc.exists()) {
+                const aptoData = aptoDoc.data();
+                resolvedApto = aptoData.number;
+                if (aptoData.blockId) {
+                  const blockDoc = await getDoc(doc(db, 'blocks', aptoData.blockId));
+                  if (blockDoc.exists()) {
+                    resolvedBlock = blockDoc.data().name;
+                  }
+                }
+              }
+            } catch (e) {
+              console.warn("[Auth] Residency resolution error:", e);
+            }
+          }
+
           const resolvedUser = { 
             id: userDoc.id, 
             ...data,
+            apartmentNumber: resolvedApto,
+            apartmentBlock: resolvedBlock
           } as User;
 
           setUser(resolvedUser);
