@@ -1,4 +1,6 @@
-# Mapeamento de Migração: Firestore para PostgreSQL (Supabase)
+# Mapeamento de Migração: Firestore para PostgreSQL (Supabase) [DOCUMENTO AUXILIAR / NÃO-CANÔNICO]
+
+**AVISO**: Este é um documento de apoio técnico para a migração de dados. A fonte única de verdade (SSOT) para contratos de domínio e regras de negócio é o **PRD (Documento de Design)**.
 
 Este documento descreve a estratégia de de-normalização e mapeamento de tipos para a transição do modelo NoSQL (Firestore) para o Relacional (PostgreSQL).
 
@@ -15,11 +17,11 @@ Responsável pelos dados de perfil vinculados ao Auth.
 
 | Campo Firestore | Coluna Postgres | Tipo Postgres | Transformação / Observação |
 | :--- | :--- | :--- | :--- |
-| `(document_id)` | `firebase_auth_id` | `TEXT` | ID único do Firebase Auth |
-| `name` | `full_name` | `TEXT` | Renomeado para maior clareza |
+| `(document_id)` | `firebase_uid` | `TEXT` | ID único do Firebase Auth |
+| `name` | `name` | `TEXT` | Alinhado com canônico |
 | `email` | `email` | `TEXT` | Sincronizado com Auth |
 | `role` | `role` | `TEXT` | Valores: 'ADMIN' ou 'RESIDENT' |
-| `active` | `is_active` | `BOOLEAN` | Tradução semântica |
+| `active` | `active` | `BOOLEAN` | Alinhado com canônico |
 | `apartmentId` | `apartment_id` | `UUID` | Foreign Key para `apartments` |
 | `residencyNote` | `residency_note` | `TEXT` | Descrição técnica da unidade |
 | `createdAt` | `created_at` | `TIMESTAMPTZ` | Default: `now()` |
@@ -40,8 +42,8 @@ Catálogo de livros físicos.
 | `isbn` | `isbn` | `TEXT` | Identificador opcional |
 | `barcode` | `barcode` | `TEXT` | Identificador opcional |
 | `status` | `status` | `TEXT` | ENUM: 'AVAILABLE', 'LOANED', 'INACTIVE' |
-| `availableLocationType` | `location_type` | `TEXT` | Categoria do local |
-| `availableLocationLabel`| `location_label` | `TEXT` | Descrição textual herdada |
+| `availableLocationType` | `available_location_type` | `TEXT` | Categoria do local |
+| `availableLocationLabel`| `available_location_label_legacy` | `TEXT` | Descrição textual herdada |
 | `createdAt` | `created_at` | `TIMESTAMPTZ` | |
 | `updatedAt` | `updated_at` | `TIMESTAMPTZ` | |
 | **(NOVO)** | `condo_id` | `UUID` | FK para `condos` |
@@ -55,7 +57,7 @@ Registro de movimentação de livros.
 | :--- | :--- | :--- | :--- |
 | `bookId` | `book_id` | `UUID` | FK para `books` |
 | `apartmentId` | `apartment_id` | `UUID` | FK para `apartments` |
-| `borrowerUserId` | `profile_id` | `UUID` | FK para `profiles` |
+| `borrowerUserId` | `borrower_user_id` | `UUID` | FK para `profiles` |
 | `loanedAt` | `loaned_at` | `TIMESTAMPTZ` | Data de início |
 | `dueAt` | `due_at` | `TIMESTAMPTZ` | Data de devolução |
 | `renewalCount` | `renewal_count` | `INTEGER` | Contador (0 a 3) |
@@ -71,9 +73,9 @@ Unidades do condomínio.
 
 | Campo Firestore | Coluna Postgres | Tipo Postgres | Transformação / Observação |
 | :--- | :--- | :--- | :--- |
-| `number` | `unit_number` | `TEXT` | Ex: "101", "A-12" |
+| `number` | `number` | `TEXT` | Ex: "101", "A-12" |
 | `blockId` | `block_id` | `UUID` | FK para `blocks` |
-| `active` | `is_active` | `BOOLEAN` | |
+| `active` | `active` | `BOOLEAN` | |
 | **(NOVO)** | `condo_id` | `UUID` | FK para `condos` |
 
 ---
@@ -84,7 +86,7 @@ Estruturas verticais ou horizontais.
 | Campo Firestore | Coluna Postgres | Tipo Postgres | Transformação / Observação |
 | :--- | :--- | :--- | :--- |
 | `name` | `name` | `TEXT` | Ex: "Torre Norte", "Bloco A" |
-| `active` | `is_active` | `BOOLEAN` | |
+| `active` | `active` | `BOOLEAN` | |
 | **(NOVO)** | `condo_id` | `UUID` | FK para `condos` |
 
 ---
@@ -95,7 +97,7 @@ Pontos fixos de logística.
 | Campo Firestore | Coluna Postgres | Tipo Postgres | Transformação / Observação |
 | :--- | :--- | :--- | :--- |
 | `name` | `name` | `TEXT` | Ex: "Portaria Central" |
-| `active` | `is_active` | `BOOLEAN` | |
+| `active` | `active` | `BOOLEAN` | |
 | **(NOVO)** | `condo_id` | `UUID` | FK para `condos` |
 
 ---

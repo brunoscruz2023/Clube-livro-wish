@@ -42,7 +42,7 @@ Este documento contém o levantamento técnico detalhado das dependências Fireb
 | | apartmentId | string | Sim | Unidade responsável |
 | | borrowerUserId | string | Sim | UID do morador |
 | | loanedAt | timestamp | Sim | Data de início |
-| | dueAt | timestamp | Sim | Data de devolução prevista |
+| | dueAt | timestamp | Sim | Data de devolução prevista (prazo inicial de 14 dias) |
 | | renewalCount | number | Sim | Contador de renovações (max 3) |
 | | status | string | Sim | 'ACTIVE', 'RETURNED' |
 | **apartments** | number | string | Sim | Número da unidade |

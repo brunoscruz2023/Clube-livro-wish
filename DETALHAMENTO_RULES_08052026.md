@@ -1,79 +1,79 @@
 # Detalhamento Técnico das Regras de Segurança (Firestore Rules)
 
-Este documento traduz a lógica técnica do arquivo `firestore.rules` para uma linguagem operacional e estratégica.
+Este documento traduz a lógica técnica do arquivo `firestore.rules` para uma linguagem operacional e estratégica, em total conformidade com o **Documento de Design (googleaidesign.md)** e o **PRD Canônico (PRD07052026.md)**.
 
 ## Security Rules, resumo operacional
 
-As regras de segurança do "Clube do Livro" utilizam um modelo de **Identidade Baseada em Atributos (ABAC)**. O acesso é segmentado entre **Administradores** (acesso total) e **Residentes** (acesso restrito ao seu contexto).
+As regras de segurança do "Clube do Livro" utilizam um modelo de **Identidade Baseada em Atributos (ABAC)**. O acesso é segmentado entre **Administradores** (acesso total) e **Residentes** (acesso restrito ao seu contexto e condicionado à aprovação).
 
 ### 1) Funções Auxiliares (Primitivas)
-- **isSignedIn()**: Verifica se o usuário está autenticado.
+- **isSignedIn()**: Verifica se o usuário está autenticado no Firebase Auth.
 - **isAdmin()**: Verifica se o e-mail do usuário é o mestre (`brunoscruz@gmail.com`) ou se o documento dele na coleção `users` possui o campo `role == 'ADMIN'`. Utiliza `exists()` e `get()` para validação robusta.
-- **getUserData()**: Atalho para recuperar o documento do usuário logado do banco de dados.
-- **belongsToApartment(aptoId)**: Crucial para segurança relacional. Verifica se o `apartmentId` no perfil do usuário no banco coincide com o `apartmentId` que ele está tentando usar em um empréstimo.
+- **getUserData()**: Atalho para recuperar o documento do usuário logado na coleção `users`.
+- **isActive()**: Verifica se o campo `active` do usuário é `true`. Condição obrigatória para a maioria das operações de escrita de Residentes.
+- **belongsToApartment(aptoId)**: Crucial para segurança relacional. Verifica se o `apartmentId` no perfil do usuário coincide com o `apartmentId` que ele está tentando registrar em um empréstimo.
 - **isValidId(id)**: Proteção contra injeção de IDs maliciosos (verifica tamanho e caracteres permitidos).
-- **incoming() / existing()**: Atalhos para os dados que estão chegando e os dados que já estão no banco, respectivamente.
+- **incoming() / existing()**: Atalhos para `request.resource.data` (dados novos) e `resource.data` (dados atuais), respectivamente.
 
 ---
 
 ## Matriz de permissões por role e entidade
 
 ### Collection: `users`
-- **Read**: Usuário pode ler seu próprio documento ou o Admin pode ler todos.
-- **Create**: Usuário logado pode criar seu próprio documento (autocadastro).
+- **Read**: O usuário pode ler apenas seu próprio documento; Administradores podem ler todos.
+- **Create**: Autocadastro permitido, mas forçando `active: false` e `role: 'RESIDENT'`.
 - **Update**: 
   - O próprio usuário pode mudar: `name`, `apartmentId`, `updatedAt`, `residencyNote`.
-  - O Administrador pode mudar qualquer campo (ex: `active`, `role`).
-- **Delete**: Apenas o Administrador.
-- **Bloqueios**: Moradores não podem alterar o campo `role` nem `active` (anti-autoprovação).
+  - O Administrador pode mudar qualquer campo, especialmente `active` e `role`.
+- **Delete**: Apenas Administrador.
+- **Bloqueios**: Residentes são proibidos de alterar os campos `role` e `active` (bloqueio de autoprovação).
 
 ### Collection: `books`
-- **Read**: Todos os usuários logados.
-- **Write (Create/Delete)**: Apenas Administrador.
+- **Read**: Todos os usuários autenticados.
+- **Write (Create/Delete)**: Restrito ao Administrador.
 - **Update**: 
-  - Usuários podem atualizar campos de localização e status (`status`, `availableLocationType`, etc.) exclusivamente durante o fluxo de empréstimo/devolução.
-  - O sistema valida se o novo status é apenas `AVAILABLE` ou `LOANED`.
+  - Residentes podem atualizar exclusivamente os campos `status`, `availableLocationType`, `availableLocationLabel` e `updatedAt` durante o fluxo de empréstimo/devolução.
+  - O sistema valida as transições de status permitidas: `AVAILABLE`, `LOANED` e `INACTIVE` (este último apenas via Admin).
 
 ### Collection: `book_loans`
-- **Read**: Todos os usuários logados (necessário para ver vitrine de quem está com o livro).
+- **Read**: Todos os usuários autenticados.
 - **Create**: 
-  - Deve ser morador da unidade (`belongsToApartment`).
-  - O livro deve estar `AVAILABLE` (checado via `get()`).
-  - Status inicial deve ser `ACTIVE` e `renewalCount` deve ser 0.
+  - Exige usuário ativo (`isActive()`) e morador da unidade (`belongsToApartment`).
+  - O livro deve estar validado como `AVAILABLE` via `get()`.
+  - Campos obrigatórios: `status: 'ACTIVE'`, `renewalCount: 0`, e validade inicial de **14 dias** (calculada como `request.time`).
 - **Update**:
-  - **Ação Renovar**: Apenas o dono do empréstimo. Permite alterar apenas `renewalCount` (incremento de +1), `dueAt`, `lastRenewedAt` e `updatedAt`. Limite rígido de 3 renovações.
-  - **Ação Devolver**: Altera status para `RETURNED` e grava dados de localização da devolução.
+  - **Ação Renovar**: Apenas o titular do empréstimo. Permite alterar apenas `renewalCount` (estritamente incremento de +1), `dueAt`, `lastRenewedAt` e `updatedAt`. Limite absoluto de **3 renovações**.
+  - **Ação Devolver**: Altera status para `RETURNED` e exige a definição da localização física para onde o livro retornará.
 - **Delete**: Apenas Administrador.
 
-### Outras Coleções (`apartments`, `blocks`, `locations`, `condos`)
-- **Read**: Todos os usuários logados.
-- **Write**: Apenas Administrador.
+### Infraestrutura (`apartments`, `blocks`, `locations`)
+- **Read**: Todos os usuários autenticados.
+- **Write**: Exclusivo para Administradores.
 
 ---
 
 ## Lista de validações críticas
 
-1. **Estado do Livro**: Um empréstimo só é gravado se a regra de segurança confirmar no banco que o status do livro é `AVAILABLE`. Isso impede que dois usuários peguem o mesmo livro simultaneamente em condições de corrida.
-2. **Afinação de Campos (affectedKeys)**: As regras usam `.diff(resource.data).affectedKeys().hasOnly([...])` para garantir que um usuário não altere campos proibidos (como mudar a data original do empréstimo para burlar multas/prazos).
-3. **Integridade de Identidade**: Força que o `borrowerUserId` no documento de empréstimo seja exatamente o UID do usuário que está autenticado.
-4. **Validação de ID**: Impede que scripts injetem strings gigantescas como chaves de documento, o que poderia causar ataques de negação de serviço ou aumento de custos de infraestrutura.
+1. **Garantia de Disponibilidade**: Um empréstimo (create) só é autorizado se a regra `get()` confirmar o status do livro no banco como `AVAILABLE`. Isso evita "Double Booking" (dois usuários pegarem o mesmo exemplar).
+2. **Afinação de Campos (affectedKeys)**: Uso rigoroso de `.diff(resource.data).affectedKeys().hasOnly([...])` para impedir a edição de campos imutáveis (como `loanedAt` ou `bookId`).
+3. **Integridade de Identidade**: O campo `borrowerUserId` deve coincidir obrigatoriamente com o `auth.uid` do requisitante.
+4. **Temporalidade Segura**: Datas de auditoria (`updatedAt`, `loanedAt`) devem utilizar obrigatoriamente `request.time` (Server Timestamp).
 
 ---
 
-## Pontos que precisam virar RLS no Supabase
+## Estratégia para o TO-BE (Supabase RLS)
 
-Caso o projeto seja migrado para Supabase (PostgreSQL), os seguintes itens precisam ser convertidos em políticas RLS:
+Na migração para o ambiente relacional descrito no **Passo 5 do PRD**, as regras devem ser convertidas preservando a intenção original:
 
-- **Proprietário do Dado**: `auth.uid() = user_id`.
-- **RBAC (Role-Based Access Control)**: Criar uma função `is_admin()` que consulta uma tabela de perfis.
-- **Validação Cruzada**: Usar subqueries em `CHECK` constraints ou políticas RLS para verificar se o livro está disponível antes de permitir o insert na tabela de empréstimos.
-- **Colunas Imutáveis**: Utilizar triggers ou as novas funcionalidades do Supabase para impedir o update em colunas como `created_at` ou `book_id` após a criação do registro.
-
----
-**Identificação de Atributos Críticos**:
-- **apartmentId**: Presente em `users` e `book_loans`. Usado para isolamento de responsabilidade da unidade.
-- **blockId**: Presente em `apartments` e `books`. Usado para hierarquia de localização.
-- **condoId**: Reservado para suporte multi-condomínio futuro (atualmente lido em `apartments` e `blocks`).
+- **Isolamento de Tenant**: Adição de cláusulas `WHERE condo_id = (SELECT condo_id FROM profiles WHERE id = auth.uid())` em todas as policies.
+- **Constraints de Check**: Invariantes como `renewal_count BETWEEN 0 AND 3` devem ser implementadas no nível de tabela (DDL).
+- **Validação Cruzada**: Uso de subconsultas em RLS ou `BEFORE INSERT` triggers para garantir o status do livro.
+- **Proteção de Colunas**: Bloqueio de updates em colunas imutáveis via gatilhos SQL.
 
 ---
-*Gerado em: 08 de Maio de 2026.*
+**Atributos de Isolação**:
+- **apartmentId**: Presente em `users` e `book_loans`. Base para a regra `belongsToApartment`.
+- **condoId**: Campo mestre de isolamento (Tenant ID) previsto no mapeamento de migração.
+
+---
+*Revisado em: 11 de Maio de 2026 (Auditado para v2.3-canonical).*
