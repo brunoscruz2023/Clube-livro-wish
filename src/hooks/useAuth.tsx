@@ -34,20 +34,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let unsubscribeDoc: (() => void) | null = null;
+    let isProvisioning = false;
 
-    // Handle redirect result for mobile browsers
     const checkRedirectResult = async () => {
       try {
         const result = await getRedirectResult(auth);
         if (result?.user) {
           console.log("Redirect sign-in successful", result.user.email);
+          isProvisioning = true;
           await ensureUserProfile(result.user);
+          isProvisioning = false;
         }
       } catch (error: any) {
         console.error("Redirect sign-in error:", error);
+        isProvisioning = false;
         if (error.code !== 'auth/redirect-cancelled-by-user') {
-          // Only alert if it's a real error, not just a cancellation
-          // Using a slight delay to ensure the UI is ready
           setTimeout(() => {
             alert("Erro ao retornar do login Google: " + error.message);
           }, 500);
@@ -66,15 +67,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (fUser) {
-        const isAdminEmail = fUser.email === 'brunoscruz@gmail.com';
         const userRef = doc(db, 'users', fUser.uid);
         
+        // Redundancy: Check if profile exists and provision if Google user
+        const userDocSync = await getDoc(userRef);
+        const isGoogleUser = fUser.providerData.some(p => p.providerId === 'google.com');
+
+        if (!userDocSync.exists() && isGoogleUser) {
+          console.log("Provisioning profile for authenticated Google user...");
+          setLoading(true);
+          await ensureUserProfile(fUser);
+        }
+
         unsubscribeDoc = onSnapshot(userRef, async (userDoc) => {
           if (userDoc.exists()) {
             const data = userDoc.data() as User;
+            const isAdminEmail = fUser.email === 'brunoscruz@gmail.com';
             
-            // Critical fix: If we have a displayName but Firestore still has 'Morador', sync it.
-            // This handles the transition from Google login or slow email signups.
             if (data.name === 'Morador' && fUser.displayName && fUser.displayName !== 'Morador') {
               await updateDoc(userRef, { name: fUser.displayName });
             }
@@ -83,13 +92,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               await updateDoc(userRef, { role: 'ADMIN' });
             }
 
-            // Resolve full residency information
             let resolvedApto = data.apartmentId || undefined;
             let resolvedBlock = undefined;
 
             if (data.apartmentId) {
               try {
-                // Try to find the apartment document to get names/numbers
                 const aptoDoc = await getDoc(doc(db, 'apartments', data.apartmentId));
                 if (aptoDoc.exists()) {
                   const aptoData = aptoDoc.data();
@@ -106,7 +113,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               }
             }
 
-            // Ensure basic user info is available even if doc resolution fails
             const basicUser = { 
               id: userDoc.id, 
               ...data, 
@@ -115,12 +121,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             } as User;
 
             setUser(basicUser);
+            setLoading(false);
           } else {
-            // Document does not exist - DO NOT auto-register anymore.
-            // This prevents deleted users from being re-created.
-            setUser(null);
+            // Only set null if we are NOT in the middle of a redirect provision
+            if (!isProvisioning) {
+              setUser(null);
+              setLoading(false);
+            }
           }
-          setLoading(false);
         }, (error) => {
           console.error("User snapshot error:", error);
           setLoading(false);
