@@ -24,6 +24,7 @@ export function Catalog() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'ALL' | 'AVAILABLE' | 'LOANED'>('ALL');
+  const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const { user } = useAuth();
   const [isLoanModalOpen, setIsLoanModalOpen] = useState(false);
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
@@ -39,11 +40,14 @@ export function Catalog() {
     setLoading(false);
   }
 
+  const categories = Array.from(new Set(books.map(b => b.category).filter(Boolean))) as string[];
+
   const filteredBooks = books.filter(book => {
     const matchesSearch = book.title.toLowerCase().includes(search.toLowerCase()) || 
                          book.author.toLowerCase().includes(search.toLowerCase());
     const matchesFilter = filter === 'ALL' || book.status === filter;
-    return matchesSearch && matchesFilter;
+    const matchesCategory = categoryFilter === 'ALL' || book.category === categoryFilter;
+    return matchesSearch && matchesFilter && matchesCategory;
   });
 
   const [loaningId, setLoaningId] = useState<string | null>(null);
@@ -91,26 +95,36 @@ export function Catalog() {
             className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           />
         </div>
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0">
-          {(['ALL', 'AVAILABLE', 'LOANED'] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={cn(
-                "whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-all shadow-sm",
-                filter === f 
-                  ? "bg-indigo-600 text-white" 
-                  : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-              )}
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          <div className="flex p-1 bg-slate-100/80 backdrop-blur-sm rounded-2xl shadow-inner items-center border border-slate-200/50 flex-1 sm:flex-none">
+            <select
+              value={filter}
+              onChange={(e) => setFilter(e.target.value as any)}
+              className="bg-transparent text-sm font-bold text-slate-600 px-4 py-2 outline-none border-none w-full cursor-pointer hover:text-indigo-600 transition-colors"
             >
-              {f === 'ALL' ? 'Todos' : f === 'AVAILABLE' ? 'Disponíveis' : 'Emprestados'}
-            </button>
-          ))}
+              <option value="ALL">Todos os Livros</option>
+              <option value="AVAILABLE">Disponíveis</option>
+              <option value="LOANED">Emprestados</option>
+            </select>
+          </div>
+
+          <div className="flex p-1 bg-slate-100/80 backdrop-blur-sm rounded-2xl shadow-inner items-center border border-slate-200/50 flex-1 sm:flex-none">
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="bg-transparent text-sm font-bold text-slate-600 px-4 py-2 outline-none border-none w-full cursor-pointer hover:text-indigo-600 transition-colors"
+            >
+              <option value="ALL">Todas Categorias</option>
+              {categories.sort().map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
         </div>
         {user?.role === 'ADMIN' && (
           <button 
-            onClick={() => navigate('/admin')}
-            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white transition-all hover:bg-indigo-700 active:scale-95 shadow-lg shadow-indigo-100"
+            onClick={() => navigate('/admin?action=new-book')}
+            className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 font-bold text-white transition-all hover:bg-indigo-700 active:scale-95 shadow-lg shadow-indigo-100"
           >
             <Plus className="h-5 w-5" />
             Novo Livro
@@ -129,7 +143,7 @@ export function Catalog() {
           <p className="mt-2 text-slate-500">Tente ajustar sua busca ou filtro.</p>
         </div>
       ) : (
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-3 xl:grid-cols-4">
           {filteredBooks.map((book) => (
             <motion.div
               layout
@@ -143,7 +157,7 @@ export function Catalog() {
                  </div>
                  <div className="absolute top-3 left-3">
                     <span className={cn(
-                      "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold shadow-sm",
+                      "inline-flex items-center gap-1 rounded-full px-2 py-1 sm:px-2.5 sm:py-0.5 text-xs font-semibold shadow-sm",
                       book.status === 'AVAILABLE' 
                         ? "bg-emerald-50 text-emerald-700 border border-emerald-100" 
                         : book.status === 'LOANED'
@@ -151,10 +165,16 @@ export function Catalog() {
                           : "bg-slate-50 text-slate-700 border border-slate-100"
                     )}>
                       {book.status === 'AVAILABLE' ? (
-                        <><CheckCircle className="h-3 w-3" /> Disponível</>
+                        <>
+                          <CheckCircle className="h-4 w-4 sm:h-3 sm:w-3" />
+                          <span className="hidden sm:inline">Disponível</span>
+                        </>
                       ) : book.status === 'LOANED' ? (
-                        <><Clock className="h-3 w-3" /> Emprestado</>
-                      ) : 'Inativo'}
+                        <>
+                          <Clock className="h-4 w-4 sm:h-3 sm:w-3" />
+                          <span className="hidden sm:inline">Emprestado</span>
+                        </>
+                      ) : <span className="px-1">Inativo</span>}
                     </span>
                  </div>
                  {book.category && (
@@ -165,8 +185,8 @@ export function Catalog() {
                     </div>
                  )}
               </div>
-              <div className="flex flex-1 flex-col p-5">
-                <h3 className="text-lg font-bold leading-tight text-slate-900 line-clamp-2">{book.title}</h3>
+              <div className="flex flex-1 flex-col p-3 sm:p-5">
+                <h3 className="text-base sm:text-lg font-bold leading-tight text-slate-900 line-clamp-2">{book.title}</h3>
                 <p className="mt-1 text-sm font-medium text-slate-500">{book.author}</p>
                 
                 <div className="mt-4 flex flex-col gap-2">
@@ -180,7 +200,7 @@ export function Catalog() {
                      <div className="flex items-center gap-2 text-xs text-indigo-600 bg-indigo-50/50 p-2 rounded-lg border border-indigo-100/50">
                        <MapPin className="h-3.5 w-3.5" />
                        <span className="font-semibold truncate">
-                         Local: {book.availableLocationLabel || 'Disponível no condomínio'}
+                         {book.availableLocationLabel || 'Disponível no condomínio'}
                        </span>
                      </div>
                    )}
@@ -191,7 +211,7 @@ export function Catalog() {
                     onClick={() => handleLoan(book)}
                     disabled={book.status !== 'AVAILABLE' || loaningId === book.id}
                     className={cn(
-                      "flex-1 rounded-xl py-2.5 text-sm font-bold transition-all active:scale-95 flex items-center justify-center gap-2",
+                      "flex-1 rounded-xl py-2 sm:py-2.5 text-xs sm:text-sm font-bold transition-all active:scale-95 flex items-center justify-center gap-1 sm:gap-2",
                       book.status === 'AVAILABLE'
                         ? "bg-indigo-600 text-white shadow-lg shadow-indigo-100 hover:bg-indigo-700"
                         : "bg-slate-100 text-slate-400 cursor-not-allowed"
@@ -199,7 +219,12 @@ export function Catalog() {
                   >
                     {loaningId === book.id ? (
                       <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                    ) : book.status === 'AVAILABLE' ? 'Pegar Emprestado' : 'Indisponível'}
+                    ) : book.status === 'AVAILABLE' ? (
+                      <>
+                        <span className="hidden sm:inline">Pegar Emprestado</span>
+                        <span className="sm:hidden">Pegar</span>
+                      </>
+                    ) : 'Indisp.'}
                   </button>
                   <button 
                     disabled={book.status !== 'AVAILABLE'}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Book, Apartment, Block, User, OperationType } from '../types';
 import { BookService } from '../services/BookService';
 import { 
@@ -37,6 +38,10 @@ import { motion } from 'motion/react';
 import { Location } from '../types';
 
 export function Admin() {
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const initialAction = searchParams.get('action');
+
   const [activeTab, setActiveTab] = useState<'BOOKS' | 'USERS' | 'APARTMENTS' | 'BLOCKS' | 'LOCATIONS'>('BOOKS');
   const [data, setData] = useState<any[]>([]);
   const [blocks, setBlocks] = useState<Block[]>([]);
@@ -44,7 +49,7 @@ export function Admin() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState<any | null>(null);
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(initialAction === 'new-book');
   const [seeding, setSeeding] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -52,8 +57,16 @@ export function Admin() {
   const [showUserSeedConfirm, setShowUserSeedConfirm] = useState(false);
 
   useEffect(() => {
+    if (initialAction === 'new-book') {
+      setActiveTab('BOOKS');
+      setShowAddForm(true);
+      setIsEditing(null);
+    }
+  }, [initialAction]);
+
+  useEffect(() => {
     loadData();
-    if (activeTab === 'APARTMENTS') {
+    if (activeTab === 'APARTMENTS' || activeTab === 'USERS') {
       loadBlocks();
     }
     if (activeTab === 'USERS') {
@@ -109,7 +122,7 @@ export function Admin() {
       // as the user is reporting that data is not appearing.
       const q = query(collection(db, path));
       const snapshot = await getDocs(q);
-      const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
       
       // Sort in memory if needed
       if (activeTab === 'BOOKS') {
@@ -501,7 +514,7 @@ export function Admin() {
                     <select name="apartmentId" className="rounded-lg border border-slate-200 p-2 text-sm bg-white">
                       <option value="">Selecione o Apartamento (Opcional)</option>
                       {apartments.map(a => (
-                        <option key={a.id} value={a.id}>Apto {a.number}</option>
+                        <option key={a.id} value={a.id}>Apto {a.number} ({blocks.find(b => b.id === a.blockId)?.name || '...'})</option>
                       ))}
                     </select>
                   </>
@@ -514,7 +527,13 @@ export function Admin() {
                   className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
                 >
                   {submitting && <Loader2 className="h-3 w-3 animate-spin" />}
-                  Salvar
+                  Cadastrar {
+                    activeTab === 'BOOKS' ? 'Livro' :
+                    activeTab === 'USERS' ? 'Usuário' :
+                    activeTab === 'APARTMENTS' ? 'Apartamento' :
+                    activeTab === 'BLOCKS' ? 'Bloco' :
+                    'Local'
+                  }
                 </button>
                 <button type="button" onClick={() => setShowAddForm(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold">Cancelar</button>
              </div>
@@ -648,9 +667,14 @@ export function Admin() {
                       <div className="flex flex-col gap-1">
                         <span className="font-medium text-slate-700">
                           {item.apartmentId ? (
-                            apartments.find(a => a.id === item.apartmentId)?.number 
-                            ? `Apto ${apartments.find(a => a.id === item.apartmentId)?.number}` 
-                            : `Apto ${item.apartmentId}`
+                            (() => {
+                              const apto = apartments.find(a => a.id === item.apartmentId);
+                              if (apto) {
+                                const block = blocks.find(b => b.id === apto.blockId);
+                                return `Apto ${apto.number} (${block?.name || '...'})`;
+                              }
+                              return `Apto ${item.apartmentId}`;
+                            })()
                           ) : (
                             item.residencyNote 
                               ? <span className="text-amber-600 italic font-normal text-xs">{item.residencyNote}</span>
