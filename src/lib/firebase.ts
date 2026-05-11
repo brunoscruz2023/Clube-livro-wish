@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { OperationType, FirestoreErrorInfo } from '../types';
@@ -7,6 +7,11 @@ import { OperationType, FirestoreErrorInfo } from '../types';
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
+
+// Explicitly set persistence to local to handle mobile browser session volatility
+setPersistence(auth, browserLocalPersistence).catch((err) => {
+  console.error("Auth persistence error:", err);
+});
 
 async function testConnection() {
   try {

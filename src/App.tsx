@@ -8,6 +8,7 @@ import {
   useNavigate
 } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuth';
+import { InAppBrowserGuard } from './components/InAppBrowserGuard';
 import { 
   BookOpen, 
   Library, 
@@ -279,6 +280,24 @@ function Login() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    setError('');
+    setSubmitting(true);
+    try {
+      await signIn();
+    } catch (err: any) {
+      console.error('Google sign-in button error:', err);
+      setError(err.message || 'Erro ao entrar com Google');
+    } finally {
+      if (!isMobile()) {
+        setSubmitting(false);
+      }
+    }
+  };
+
+  // Helper to detect mobile just for the submitting state logic
+  const isMobile = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 p-4">
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl shadow-slate-200">
@@ -386,12 +405,16 @@ function Login() {
         </div>
 
         <button
-          onClick={signIn}
+          onClick={handleGoogleSignIn}
           disabled={submitting || authLoading}
           className="flex w-full items-center justify-center gap-3 rounded-xl bg-white border border-slate-200 px-6 py-4 font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50 active:scale-[0.98] disabled:opacity-50"
         >
-          <img src="https://www.google.com/favicon.ico" className="h-5 w-5" alt="Google" />
-          Entrar com Google
+          {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : (
+            <>
+              <img src="https://www.google.com/favicon.ico" className="h-5 w-5" alt="Google" />
+              Entrar com Google
+            </>
+          )}
         </button>
 
         <p className="mt-8 text-center text-sm text-slate-500">
@@ -430,15 +453,17 @@ function PrivateRoute({ children, adminOnly = false }: { children: React.ReactNo
 export default function App() {
   return (
     <AuthProvider>
-      <Router>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/" element={<PrivateRoute><Catalog /></PrivateRoute>} />
-          <Route path="/loans" element={<PrivateRoute><MyLoans /></PrivateRoute>} />
-          <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
-          <Route path="/admin" element={<PrivateRoute adminOnly><Admin /></PrivateRoute>} />
-        </Routes>
-      </Router>
+      <InAppBrowserGuard>
+        <Router>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/" element={<PrivateRoute><Catalog /></PrivateRoute>} />
+            <Route path="/loans" element={<PrivateRoute><MyLoans /></PrivateRoute>} />
+            <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
+            <Route path="/admin" element={<PrivateRoute adminOnly><Admin /></PrivateRoute>} />
+          </Routes>
+        </Router>
+      </InAppBrowserGuard>
     </AuthProvider>
   );
 }

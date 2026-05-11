@@ -2,6 +2,8 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { 
   onAuthStateChanged, 
   signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider, 
   signOut, 
   signInWithEmailAndPassword,
@@ -32,6 +34,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let unsubscribeDoc: (() => void) | null = null;
+
+    // Handle redirect result for mobile browsers
+    const checkRedirectResult = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result?.user) {
+          console.log("Redirect sign-in successful", result.user.email);
+          await ensureUserProfile(result.user);
+        }
+      } catch (error: any) {
+        console.error("Redirect sign-in error:", error);
+        if (error.code !== 'auth/redirect-cancelled-by-user') {
+          // Only alert if it's a real error, not just a cancellation
+          // Using a slight delay to ensure the UI is ready
+          setTimeout(() => {
+            alert("Erro ao retornar do login Google: " + error.message);
+          }, 500);
+        }
+      }
+    };
+
+    checkRedirectResult();
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (fUser) => {
       setFirebaseUser(fUser);
@@ -113,9 +137,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const ensureUserProfile = async (fUser: FirebaseUser) => {
+    const userRef = doc(db, 'users', fUser.uid);
+    try {
+      const userDoc = await getDoc(userRef);
+      if (!userDoc.exists()) {
+        const isAdminEmail = fUser.email === 'brunoscruz@gmail.com';
+        await setDoc(userRef, {
+          name: fUser.displayName || 'Morador',
+          email: fUser.email,
+          role: isAdminEmail ? 'ADMIN' : 'RESIDENT',
+          active: isAdminEmail ? true : false,
+          apartmentId: null,
+          residencyNote: 'Aguardando informações (Login via Google)',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        console.log("New user profile created for:", fUser.email);
+      }
+    } catch (error) {
+      console.error("Error ensuring user profile:", error);
+    }
+  };
+
+  const isMobile = () => {
+    return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  };
+
   const signIn = async () => {
-    const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      
+      if (isMobile()) {
+        console.log("Mobile detected, using redirect flow");
+        await signInWithRedirect(auth, provider);
+      } else {
+        const result = await signInWithPopup(auth, provider);
+        if (result.user) {
+          await ensureUserProfile(result.user);
+        }
+      }
+    } catch (error: any) {
+      console.error("Google Sign-In Error:", error);
+      
+      // Handle the specific "missing initial state" or "popup blocked" errors on mobile
+      if (
+        error.code === 'auth/internal-error' || 
+        error.code === 'auth/popup-blocked' ||
+        error.code === 'auth/cancelled-popup-request' ||
+        error.message?.includes('initial state')
+      ) {
+        alert(
+          "O login do Google falhou devido a restrições do seu navegador móvel.\n\n" +
+          "Solução: Use a opção 'Entrar com Email e Senha' ou abra este link diretamente no Chrome/Safari."
+        );
+      } else {
+        alert("Erro ao entrar com Google: " + error.message);
+      }
+    }
   };
 
   const signInWithEmail = async (email: string, pass: string) => {
