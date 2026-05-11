@@ -34,109 +34,83 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let unsubscribeDoc: (() => void) | null = null;
-    let isProvisioning = false;
+    let provisioningInProgress = false;
 
-    const checkRedirectResult = async () => {
+    // Handle the redirect result separately to ensure we don't miss it
+    const handleRedirect = async () => {
       try {
         const result = await getRedirectResult(auth);
         if (result?.user) {
-          console.log("Redirect sign-in successful", result.user.email);
-          isProvisioning = true;
-          await ensureUserProfile(result.user);
-          isProvisioning = false;
+          console.log("[Auth] Redirect result found for:", result.user.email);
         }
       } catch (error: any) {
-        console.error("Redirect sign-in error:", error);
-        isProvisioning = false;
-        if (error.code !== 'auth/redirect-cancelled-by-user') {
-          setTimeout(() => {
-            alert("Erro ao retornar do login Google: " + error.message);
-          }, 500);
-        }
+        console.error("[Auth] Redirect error:", error);
       }
     };
-
-    checkRedirectResult();
+    handleRedirect();
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (fUser) => {
+      console.log("[Auth] onAuthStateChanged:", fUser?.email || "No user");
       setFirebaseUser(fUser);
       
-      if (unsubscribeDoc) {
-        unsubscribeDoc();
-        unsubscribeDoc = null;
-      }
-
-      if (fUser) {
-        const userRef = doc(db, 'users', fUser.uid);
-        
-        // Redundancy: Check if profile exists and provision if Google user
-        const userDocSync = await getDoc(userRef);
-        const isGoogleUser = fUser.providerData.some(p => p.providerId === 'google.com');
-
-        if (!userDocSync.exists() && isGoogleUser) {
-          console.log("Provisioning profile for authenticated Google user...");
-          setLoading(true);
-          await ensureUserProfile(fUser);
-        }
-
-        unsubscribeDoc = onSnapshot(userRef, async (userDoc) => {
-          if (userDoc.exists()) {
-            const data = userDoc.data() as User;
-            const isAdminEmail = fUser.email === 'brunoscruz@gmail.com';
-            
-            if (data.name === 'Morador' && fUser.displayName && fUser.displayName !== 'Morador') {
-              await updateDoc(userRef, { name: fUser.displayName });
-            }
-
-            if (isAdminEmail && data.role !== 'ADMIN') {
-              await updateDoc(userRef, { role: 'ADMIN' });
-            }
-
-            let resolvedApto = data.apartmentId || undefined;
-            let resolvedBlock = undefined;
-
-            if (data.apartmentId) {
-              try {
-                const aptoDoc = await getDoc(doc(db, 'apartments', data.apartmentId));
-                if (aptoDoc.exists()) {
-                  const aptoData = aptoDoc.data();
-                  resolvedApto = aptoData.number;
-                  if (aptoData.blockId) {
-                    const blockDoc = await getDoc(doc(db, 'blocks', aptoData.blockId));
-                    if (blockDoc.exists()) {
-                      resolvedBlock = blockDoc.data().name;
-                    }
-                  }
-                }
-              } catch (e) {
-                console.error("Error resolving residency info:", e);
-              }
-            }
-
-            const basicUser = { 
-              id: userDoc.id, 
-              ...data, 
-              apartmentNumber: resolvedApto, 
-              apartmentBlock: resolvedBlock 
-            } as User;
-
-            setUser(basicUser);
-            setLoading(false);
-          } else {
-            // Only set null if we are NOT in the middle of a redirect provision
-            if (!isProvisioning) {
-              setUser(null);
-              setLoading(false);
-            }
-          }
-        }, (error) => {
-          console.error("User snapshot error:", error);
-          setLoading(false);
-        });
-      } else {
+      if (!fUser) {
+        if (unsubscribeDoc) unsubscribeDoc();
         setUser(null);
         setLoading(false);
+        return;
       }
+
+      const userRef = doc(db, "users", fUser.uid);
+
+      if (unsubscribeDoc) unsubscribeDoc();
+
+      unsubscribeDoc = onSnapshot(userRef, async (userDoc) => {
+        if (userDoc.exists()) {
+          const data = userDoc.data() as User;
+          
+          // Check if we need to sync anything (Admin status, etc) in background
+          const isAdminEmail = fUser.email === 'brunoscruz@gmail.com';
+          if (isAdminEmail && (data.role !== 'ADMIN' || !data.active)) {
+            updateDoc(userRef, { role: 'ADMIN', active: true }).catch(e => console.error("Admin sync failed", e));
+          }
+
+          const resolvedUser = { 
+            id: userDoc.id, 
+            ...data,
+          } as User;
+
+          setUser(resolvedUser);
+          setLoading(false);
+        } else {
+          console.log("[Auth] User profile missing");
+          const isGoogleUser = fUser.providerData.some(p => p.providerId === 'google.com');
+
+          if (isGoogleUser && !provisioningInProgress) {
+            provisioningInProgress = true;
+            console.log("[Auth] Provisioning Google profile...");
+            setLoading(true);
+            try {
+              await ensureUserProfile(fUser);
+              // The snapshot will trigger again when doc is created
+            } catch (e: any) {
+              console.error("[Auth] Provisioning failed:", e);
+              alert("Erro ao criar perfil de usuário: " + e.message);
+              setUser(null);
+              setLoading(false);
+            } finally {
+              provisioningInProgress = false;
+            }
+          } else if (!provisioningInProgress) {
+            // Not a google user or already failed provisioning
+            console.log("[Auth] Unauthorized profile state - logout");
+            setUser(null);
+            setLoading(false);
+          }
+        }
+      }, (error) => {
+        console.error("[Auth] Profile snapshot error:", error);
+        setLoading(false);
+      });
     });
 
     return () => {
@@ -147,43 +121,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const ensureUserProfile = async (fUser: FirebaseUser) => {
     const userRef = doc(db, 'users', fUser.uid);
-    try {
-      const userDoc = await getDoc(userRef);
-      if (!userDoc.exists()) {
-        const isAdminEmail = fUser.email === 'brunoscruz@gmail.com';
-        await setDoc(userRef, {
-          name: fUser.displayName || 'Morador',
-          email: fUser.email,
-          role: isAdminEmail ? 'ADMIN' : 'RESIDENT',
-          active: isAdminEmail ? true : false,
-          apartmentId: null,
-          residencyNote: 'Aguardando informações (Login via Google)',
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-        console.log("New user profile created for:", fUser.email);
-      }
-    } catch (error) {
-      console.error("Error ensuring user profile:", error);
+    const userSnap = await getDoc(userRef);
+    
+    if (!userSnap.exists()) {
+      const isAdminEmail = fUser.email === 'brunoscruz@gmail.com';
+      await setDoc(userRef, {
+        name: fUser.displayName || 'Morador',
+        email: fUser.email,
+        role: isAdminEmail ? 'ADMIN' : 'RESIDENT',
+        active: isAdminEmail ? true : false,
+        apartmentId: null,
+        residencyNote: 'Aguardando informações (Login via Google)',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      console.log("[Auth] New user profile successfully created");
     }
   };
 
   const isMobile = () => {
-    return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    return /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(navigator.userAgent) || 
+           (navigator.maxTouchPoints > 0);
   };
 
   const signIn = async () => {
     try {
       const provider = new GoogleAuthProvider();
+      // Force account selection to avoid auto-login loops that might be stuck
       provider.setCustomParameters({ prompt: 'select_account' });
       
-      if (isMobile()) {
-        console.log("Mobile detected, using redirect flow");
-        await signInWithRedirect(auth, provider);
-      } else {
+      // Use popup for everything first, fallback to redirect ONLY if specifically blocked
+      try {
         const result = await signInWithPopup(auth, provider);
         if (result.user) {
           await ensureUserProfile(result.user);
+        }
+      } catch (error: any) {
+        if (error.code === 'auth/popup-blocked') {
+          console.log("Popup blocked, trying redirect as fallback");
+          await signInWithRedirect(auth, provider);
+        } else {
+          throw error;
         }
       }
     } catch (error: any) {
