@@ -17,6 +17,7 @@ import {
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../hooks/useAuth';
+import { BookCard } from '../components/BookCard';
 
 export function Catalog() {
   const navigate = useNavigate();
@@ -145,68 +146,51 @@ export function Catalog() {
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-3 xl:grid-cols-4">
           {filteredBooks.map((book) => (
-            <motion.div
-              layout
+            <BookCard
               key={book.id}
-              className="group relative flex flex-col overflow-hidden rounded-2xl bg-white border border-slate-100 shadow-xl shadow-slate-100/50 transition-all hover:shadow-2xl hover:shadow-indigo-100/40"
-            >
-              <div className="aspect-[3/4] w-full bg-slate-100 overflow-hidden relative">
-                 {/* Placeholder for cover or generic icon */}
-                 <div className="absolute inset-0 flex items-center justify-center text-slate-300 group-hover:scale-110 transition-transform duration-500">
-                    <BookIcon className="h-20 w-20 opacity-20" />
-                 </div>
-                 <div className="absolute top-3 left-3">
-                    <span className={cn(
-                      "inline-flex items-center gap-1 rounded-full px-2 py-1 sm:px-2.5 sm:py-0.5 text-xs font-semibold shadow-sm",
-                      book.status === 'AVAILABLE' 
-                        ? "bg-emerald-50 text-emerald-700 border border-emerald-100" 
-                        : book.status === 'LOANED'
-                          ? "bg-amber-50 text-amber-700 border border-amber-100"
-                          : "bg-slate-50 text-slate-700 border border-slate-100"
-                    )}>
-                      {book.status === 'AVAILABLE' ? (
-                        <>
-                          <CheckCircle className="h-4 w-4 sm:h-3 sm:w-3" />
-                          <span className="hidden sm:inline">Disponível</span>
-                        </>
-                      ) : book.status === 'LOANED' ? (
-                        <>
-                          <Clock className="h-4 w-4 sm:h-3 sm:w-3" />
-                          <span className="hidden sm:inline">Emprestado</span>
-                        </>
-                      ) : <span className="px-1">Inativo</span>}
-                    </span>
-                 </div>
-                 {book.category && (
-                    <div className="absolute top-3 right-3">
-                      <span className="rounded-full bg-slate-900/60 backdrop-blur-sm px-2 py-0.5 text-[10px] uppercase tracking-wider text-white font-bold">
-                        {book.category}
+              book={book}
+              badge={
+                <span className={cn(
+                  "inline-flex items-center gap-1 rounded-full px-2 py-1 sm:px-2.5 sm:py-0.5 text-[10px] sm:text-xs font-semibold shadow-sm",
+                  book.status === 'AVAILABLE' 
+                    ? "bg-emerald-50 text-emerald-700 border border-emerald-100" 
+                    : book.status === 'LOANED'
+                      ? "bg-amber-50 text-amber-700 border border-amber-100"
+                      : "bg-slate-50 text-slate-700 border border-slate-100"
+                )}>
+                  {book.status === 'AVAILABLE' ? (
+                    <>
+                      <CheckCircle className="h-4 w-4 sm:h-3 sm:w-3" />
+                      <span className="hidden sm:inline">Disponível</span>
+                    </>
+                  ) : book.status === 'LOANED' ? (
+                    <>
+                      <Clock className="h-4 w-4 sm:h-3 sm:w-3" />
+                      <span className="hidden sm:inline">Emprestado</span>
+                    </>
+                  ) : <span className="px-1">Inativo</span>}
+                </span>
+              }
+              metadata={
+                <>
+                  {book.status === 'LOANED' && (
+                    <div className="flex items-center gap-2 text-[10px] sm:text-xs text-slate-500 bg-slate-50 p-1.5 sm:p-2 rounded-lg border border-slate-100">
+                      <User className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
+                      <span className="font-medium truncate">{book.loanedToApartmentLabel || book.availableLocationLabel || 'Emprestado' }</span>
+                    </div>
+                  )}
+                  {book.status === 'AVAILABLE' && (
+                    <div className="flex items-center gap-2 text-[10px] sm:text-xs text-indigo-600 bg-indigo-50/50 p-1.5 sm:p-2 rounded-lg border border-indigo-100/50">
+                      <MapPin className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
+                      <span className="font-semibold truncate">
+                        {book.availableLocationLabel || 'Disponível no condomínio'}
                       </span>
                     </div>
-                 )}
-              </div>
-              <div className="flex flex-1 flex-col p-3 sm:p-5">
-                <h3 className="text-base sm:text-lg font-bold leading-tight text-slate-900 line-clamp-2">{book.title}</h3>
-                <p className="mt-1 text-sm font-medium text-slate-500">{book.author}</p>
-                
-                <div className="mt-4 flex flex-col gap-2">
-                   {book.status === 'LOANED' && (
-                     <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100">
-                       <User className="h-3.5 w-3.5" />
-                       <span className="font-medium truncate">Emprestado para: {book.availableLocationLabel || 'Morador' }</span>
-                     </div>
-                   )}
-                   {book.status === 'AVAILABLE' && (
-                     <div className="flex items-center gap-2 text-xs text-indigo-600 bg-indigo-50/50 p-2 rounded-lg border border-indigo-100/50">
-                       <MapPin className="h-3.5 w-3.5" />
-                       <span className="font-semibold truncate">
-                         {book.availableLocationLabel || 'Disponível no condomínio'}
-                       </span>
-                     </div>
-                   )}
-                </div>
-
-                <div className="mt-6 flex gap-2">
+                  )}
+                </>
+              }
+              actions={
+                <>
                   <button
                     onClick={() => handleLoan(book)}
                     disabled={book.status !== 'AVAILABLE' || loaningId === book.id}
@@ -228,13 +212,13 @@ export function Catalog() {
                   </button>
                   <button 
                     disabled={book.status !== 'AVAILABLE'}
-                    className="flex aspect-square items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 active:scale-90 transition-all"
+                    className="flex aspect-square items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 active:scale-90 transition-all p-2"
                   >
-                    <Scan className="h-5 w-5" />
+                    <Scan className="h-4 w-4 sm:h-5 sm:w-5" />
                   </button>
-                </div>
-              </div>
-            </motion.div>
+                </>
+              }
+            />
           ))}
         </div>
       )}

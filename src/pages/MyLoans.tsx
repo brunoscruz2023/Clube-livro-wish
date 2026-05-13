@@ -20,13 +20,16 @@ import { format, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import { BookCard } from '../components/BookCard';
 
 interface ActiveLoan extends BookLoan {
   book: Book;
 }
 
 export function MyLoans() {
-  const [loans, setLoans] = useState<ActiveLoan[]>([]);
+  const [activeLoans, setActiveLoans] = useState<ActiveLoan[]>([]);
+  const [historyLoans, setHistoryLoans] = useState<ActiveLoan[]>([]);
+  const [activeTab, setActiveTab] = useState<'ACTIVE' | 'HISTORY'>('ACTIVE');
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const [returningId, setReturningId] = useState<string | null>(null);
@@ -40,7 +43,7 @@ export function MyLoans() {
       loadLoans();
       loadLocations();
     }
-  }, [user]);
+  }, [user, activeTab]);
 
   async function loadLocations() {
     try {
@@ -56,10 +59,12 @@ export function MyLoans() {
     if (!user?.apartmentId) return;
     setLoading(true);
     try {
+      const dbStatus = activeTab === 'ACTIVE' ? 'ACTIVE' : 'RETURNED';
       const q = query(
         collection(db, 'book_loans'),
         where('apartmentId', '==', user.apartmentId),
-        where('status', '==', 'ACTIVE')
+        where('status', '==', dbStatus),
+        orderBy('updatedAt', 'desc')
       );
       const snapshot = await getDocs(q);
       const loansData = await Promise.all(snapshot.docs.map(async (d) => {
@@ -70,12 +75,19 @@ export function MyLoans() {
           book: { id: bookDoc.id, ...bookDoc.data() } as Book
         };
       }));
-      setLoans(loansData);
+      
+      if (activeTab === 'ACTIVE') {
+        setActiveLoans(loansData);
+      } else {
+        setHistoryLoans(loansData);
+      }
     } catch (error) {
       console.error(error);
     }
     setLoading(false);
   }
+
+  const loans = activeTab === 'ACTIVE' ? activeLoans : historyLoans;
 
   const handleRenew = async (loanId: string) => {
     try {
@@ -137,14 +149,36 @@ export function MyLoans() {
 
   return (
     <div className="space-y-8">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Empréstimos Ativos</h1>
-          <p className="mt-1 text-slate-500">Gerencie os livros que estão com o Apto {user.apartmentId}.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+            {activeTab === 'ACTIVE' ? 'Meus Empréstimos' : 'Histórico de Leitura'}
+          </h1>
+          <p className="mt-1 text-slate-500">
+            {activeTab === 'ACTIVE' 
+              ? `Gerencie os livros que estão com o Apto ${user.apartmentNumber || 'do Morador'}${user.apartmentBlock ? ` - ${user.apartmentBlock}` : ''}.`
+              : 'Veja os livros que já passaram pela sua unidade.'}
+          </p>
         </div>
-        <div className="flex items-center gap-2 rounded-2xl bg-indigo-50 px-4 py-2 text-indigo-700 border border-indigo-100">
-           <BookIcon className="h-5 w-5" />
-           <span className="font-bold">{loans.length} / 3</span>
+        <div className="flex bg-slate-100 p-1 rounded-xl w-fit">
+          <button
+            onClick={() => setActiveTab('ACTIVE')}
+            className={cn(
+              "px-4 py-2 text-sm font-bold rounded-lg transition-all",
+              activeTab === 'ACTIVE' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+            )}
+          >
+            Ativos
+          </button>
+          <button
+            onClick={() => setActiveTab('HISTORY')}
+            className={cn(
+              "px-4 py-2 text-sm font-bold rounded-lg transition-all",
+              activeTab === 'HISTORY' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+            )}
+          >
+            Histórico
+          </button>
         </div>
       </header>
 
@@ -155,87 +189,94 @@ export function MyLoans() {
       ) : loans.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-3xl bg-white border border-slate-100 p-20 text-center shadow-sm">
           <History className="mb-4 h-12 w-12 text-slate-200" />
-          <h3 className="text-xl font-semibold text-slate-900">Nenhum empréstimo ativo</h3>
+          <h3 className="text-xl font-semibold text-slate-900">
+            {activeTab === 'ACTIVE' ? 'Nenhum empréstimo ativo' : 'Nenhum registro no histórico'}
+          </h3>
           <p className="mt-2 text-slate-500">Que tal pegar um livro novo no catálogo?</p>
         </div>
       ) : (
-        <div className="grid gap-6">
+        <div className="grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-3 xl:grid-cols-4">
           {loans.map((loan) => {
             const dueDate = loan.dueAt.toDate();
             const daysLeft = differenceInDays(dueDate, new Date());
-            const isOverdue = daysLeft < 0;
+            const isOverdue = daysLeft < 0 && activeTab === 'ACTIVE';
+            const isHistory = activeTab === 'HISTORY';
 
             return (
-              <motion.div
-                layout
+              <BookCard
                 key={loan.id}
-                className="flex flex-col overflow-hidden rounded-2xl bg-white border border-slate-200 shadow-sm md:flex-row"
-              >
-                <div className="aspect-[3/4] w-full bg-slate-50 md:w-32 flex-shrink-0 flex items-center justify-center">
-                  <BookIcon className="h-10 w-10 text-slate-200" />
-                </div>
-                <div className="flex flex-1 flex-col p-6">
-                  <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
-                    <div>
-                      <h3 className="text-xl font-bold text-slate-900">{loan.book.title}</h3>
-                      <p className="text-slate-500">{loan.book.author}</p>
+                book={loan.book}
+                badge={
+                  <div className={cn(
+                    "inline-flex items-center gap-1 sm:gap-2 rounded-full px-2 py-1 sm:px-4 sm:py-1.5 text-[9px] sm:text-xs font-bold ring-1 ring-inset shadow-sm backdrop-blur-md",
+                    isHistory
+                      ? "bg-emerald-50/90 text-emerald-700 ring-emerald-600/20"
+                      : isOverdue 
+                        ? "bg-red-50/90 text-red-700 ring-red-600/20" 
+                        : "bg-blue-50/90 text-blue-700 ring-blue-600/20"
+                  )}>
+                    {isHistory ? (
+                      <>
+                        <CheckCircle2 className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                        <span className="hidden sm:inline">Devolvido</span>
+                        <span className="sm:hidden">Devolv.</span>
+                      </>
+                    ) : (
+                      <>
+                        <Calendar className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                        <span>{isOverdue ? 'Atrasado' : `${daysLeft}d`}</span>
+                      </>
+                    )}
+                  </div>
+                }
+                metadata={
+                  <div className="space-y-1.5 sm:space-y-2">
+                    <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-slate-500 bg-slate-50/50 p-1.5 sm:p-2 rounded-lg border border-slate-100">
+                      <Clock className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-slate-400" />
+                      <span className="truncate">
+                        {isHistory 
+                          ? `Dev.: ${loan.returnedAt ? format(loan.returnedAt.toDate(), "dd/MM") : '-'}` 
+                          : `Venc.: ${format(dueDate, "dd/MM")}`}
+                      </span>
                     </div>
-                    <div className={cn(
-                      "inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-bold ring-1 ring-inset",
-                      isOverdue 
-                        ? "bg-red-50 text-red-700 ring-red-600/20" 
-                        : "bg-blue-50 text-blue-700 ring-blue-600/20"
-                    )}>
-                      <Calendar className="h-3.5 w-3.5" />
-                      {isOverdue ? 'Atrasado' : `Vence em ${daysLeft} dias`}
+                    <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-slate-400 bg-slate-50/30 p-1.5 sm:p-2 rounded-lg border border-slate-50">
+                      <RotateCcw className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                      <span>{loan.renewalCount}/3 renov.</span>
                     </div>
                   </div>
-
-                  <div className="mt-6 grid grid-cols-2 gap-4 border-y border-slate-100 py-6 sm:grid-cols-4">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Pegou em</p>
-                      <p className="mt-1 text-sm font-semibold">{format(loan.loanedAt.toDate(), "dd/MM/yyyy", { locale: ptBR })}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Vence em</p>
-                      <p className="mt-1 text-sm font-semibold text-indigo-600">{format(dueDate, "dd/MM/yyyy", { locale: ptBR })}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Renovações</p>
-                      <p className="mt-1 text-sm font-semibold">{loan.renewalCount} / 3</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Status</p>
-                      <p className="mt-1 text-sm font-semibold text-emerald-600 capitalize">Ativo</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-6 flex flex-wrap gap-3">
+                }
+                actions={activeTab === 'ACTIVE' ? (
+                  <div className="flex flex-col w-full gap-2 mt-2">
                     <button
                       onClick={() => handleRenew(loan.id)}
                       disabled={loan.renewalCount >= 3}
-                      className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition-all hover:bg-slate-50 active:scale-95 disabled:opacity-50"
+                      className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white py-2 text-[10px] sm:text-xs font-bold text-slate-700 transition-all hover:bg-slate-50 active:scale-95 disabled:opacity-50"
                     >
-                      <RotateCcw className="h-4 w-4" />
+                      <RotateCcw className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                       Renovar
                     </button>
                     <button
                       onClick={() => handleReturnClick(loan)}
                       disabled={returningId === loan.id}
-                      className="flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-6 py-2 text-sm font-bold text-white transition-all hover:bg-slate-800 active:scale-95 disabled:opacity-50 min-w-[140px]"
+                      className="flex items-center justify-center gap-1.5 rounded-xl bg-slate-900 py-2 text-[10px] sm:text-xs font-bold text-white transition-all hover:bg-slate-800 active:scale-95 disabled:opacity-50"
                     >
                       {returningId === loan.id ? (
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                        <div className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
                       ) : (
                         <>
-                          <CheckCircle2 className="h-4 w-4" />
-                          Devolver Livro
+                          <CheckCircle2 className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                          Devolver
                         </>
                       )}
                     </button>
                   </div>
-                </div>
-              </motion.div>
+                ) : (
+                  <div className="flex items-center gap-2 text-[10px] sm:text-xs text-slate-500 mt-2 italic px-1">
+                    <MapPin className="h-3 w-3" />
+                    <span className="truncate">{loan.returnLocationLabel || 'Hall'}</span>
+                  </div>
+                )}
+              />
             );
           })}
         </div>

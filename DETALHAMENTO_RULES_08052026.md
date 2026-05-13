@@ -32,7 +32,7 @@ As regras de segurança do "Clube do Livro" utilizam um modelo de **Identidade B
 - **Read**: Todos os usuários autenticados.
 - **Write (Create/Delete)**: Restrito ao Administrador.
 - **Update**: 
-  - Residentes podem atualizar exclusivamente os campos `status`, `availableLocationType`, `availableLocationLabel` e `updatedAt` durante o fluxo de empréstimo/devolução.
+  - Residentes podem atualizar exclusivamente os campos `status`, `availableLocationType`, `availableLocationLabel`, `loanedToApartmentId`, `loanedToApartmentLabel` e `updatedAt` durante o fluxo de empréstimo/devolução.
   - O sistema valida as transições de status permitidas: `AVAILABLE`, `LOANED` e `INACTIVE` (este último apenas via Admin).
 
 ### Collection: `book_loans`

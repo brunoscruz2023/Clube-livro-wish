@@ -226,7 +226,7 @@ export function Admin() {
           author: formData.get('author') as string,
           category: formData.get('category') as string,
           barcode: formData.get('barcode') as string,
-          availableLocationType: formData.get('locationType') as string || 'FIXED_POINT',
+          availableLocationType: formData.get('locationType') as string || 'HALL',
           availableLocationLabel: formData.get('locationLabel') as string || '',
           status: 'AVAILABLE',
           active: true,
@@ -472,7 +472,7 @@ export function Admin() {
                     <input name="author" placeholder="Autor" required className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
                     <input name="category" placeholder="Categoria" className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
                     <select name="locationType" className="rounded-lg border border-slate-200 p-2 text-sm bg-white">
-                      <option value="FIXED_POINT">Local Fixo (Hall/Shelf)</option>
+                      <option value="HALL">Hall do Bloco</option>
                       <option value="APARTMENT">Apartamento</option>
                     </select>
                     <div className="flex flex-col gap-1">
@@ -548,8 +548,8 @@ export function Admin() {
                   <>
                     <input name="title" defaultValue={isEditing.title} placeholder="Título" required className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
                     <input name="author" defaultValue={isEditing.author} placeholder="Autor" required className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
-                    <select name="locationType" defaultValue={isEditing.availableLocationType || 'FIXED_POINT'} className="rounded-lg border border-slate-200 p-2 text-sm bg-white">
-                      <option value="FIXED_POINT">Local Fixo (Hall/Shelf)</option>
+                    <select name="locationType" defaultValue={isEditing.availableLocationType || 'HALL'} className="rounded-lg border border-slate-200 p-2 text-sm bg-white">
+                      <option value="HALL">Hall do Bloco</option>
                       <option value="APARTMENT">Apartamento</option>
                     </select>
                     <select name="locationLabel" defaultValue={isEditing.availableLocationLabel} className="rounded-lg border border-slate-200 p-2 text-sm bg-white">

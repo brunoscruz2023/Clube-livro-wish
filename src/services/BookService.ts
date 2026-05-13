@@ -99,6 +99,9 @@ export const BookService = {
           status: 'LOANED',
           availableLocationType: 'APARTMENT',
           availableLocationLabel: aptoLabel,
+          availableLocationBlockId: null,
+          loanedToApartmentId: apartmentId,
+          loanedToApartmentLabel: aptoLabel,
           updatedAt: serverTimestamp()
         });
       });
@@ -153,6 +156,8 @@ export const BookService = {
           availableLocationType: location.type,
           availableLocationLabel: location.label || null,
           availableLocationBlockId: location.blockId || null,
+          loanedToApartmentId: null,
+          loanedToApartmentLabel: null,
           updatedAt: serverTimestamp()
         });
       });

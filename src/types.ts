@@ -43,7 +43,7 @@ export interface User {
 }
 
 export type BookStatus = 'AVAILABLE' | 'LOANED' | 'INACTIVE';
-export type LocationType = 'BLOCK_ENTRANCE' | 'APARTMENT' | 'FIXED_POINT' | 'OTHER';
+export type LocationType = 'HALL' | 'APARTMENT';
 
 export interface Location {
   id: string;
@@ -65,6 +65,8 @@ export interface Book {
   availableLocationType?: LocationType;
   availableLocationBlockId?: string;
   availableLocationLabel?: string;
+  loanedToApartmentId?: string;
+  loanedToApartmentLabel?: string;
   notes?: string;
   createdAt: any;
   updatedAt: any;

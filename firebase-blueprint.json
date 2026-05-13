@@ -82,6 +82,8 @@
         "availableLocationType": { "type": "string", "enum": ["BLOCK_ENTRANCE", "APARTMENT", "FIXED_POINT", "OTHER"] },
         "availableLocationBlockId": { "type": "string" },
         "availableLocationLabel": { "type": "string" },
+        "loanedToApartmentId": { "type": "string" },
+        "loanedToApartmentLabel": { "type": "string" },
         "notes": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }

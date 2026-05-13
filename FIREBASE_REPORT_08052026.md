@@ -30,6 +30,8 @@ Este documento contém o levantamento técnico detalhado das dependências Fireb
 | | role | string | Sim | 'ADMIN' ou 'RESIDENT' |
 | | active | boolean | Sim | Libera/Bloqueia acesso |
 | | apartmentId | string | Não | Link com a unidade |
+| | apartmentNumber | string | Virtual | Resolvido em runtime via `useAuth` |
+| | apartmentBlock | string | Virtual | Resolvido em runtime via `useAuth` |
 | | residencyNote | string | Não | Descrição da unidade (ex: "Bloco A - 101") |
 | | createdAt/updatedAt | timestamp | Sim | Metadados de tempo |
 | **books** | title | string | Sim | Título da obra |
@@ -38,6 +40,8 @@ Este documento contém o levantamento técnico detalhado das dependências Fireb
 | | status | string | Sim | 'AVAILABLE', 'LOANED', 'INACTIVE' |
 | | availableLocationType | string | Não | Categoria do local onde o livro está |
 | | availableLocationLabel | string | Não | Descrição textual do local (ex: "Apto 101") |
+| | loanedToApartmentId | string | Não | ID do apartamento do morador atual |
+| | loanedToApartmentLabel| string | Não | Identificação amigável (Apto + Bloco) |
 | **book_loans** | bookId | string | Sim | ID do livro emprestado |
 | | apartmentId | string | Sim | Unidade responsável |
 | | borrowerUserId | string | Sim | UID do morador |
@@ -58,7 +62,7 @@ Este documento contém o levantamento técnico detalhado das dependências Fireb
 | Local (Arquivo/Fluxo) | Query (where/orderBy) | Índice Provável | Workaround Atual |
 | :--- | :--- | :--- | :--- |
 | **Catalog.tsx** | `books` where `active == true` orderBy `title` | `active: ASC, title: ASC` | Nenhum (usa query nativa) |
-| **MyLoans.tsx** | `book_loans` where `apartmentId == ID` where `status == 'ACTIVE'` | `apartmentId: ASC, status: ASC` | Nenhum |
+| **MyLoans.tsx** | `book_loans` where `apartmentId == ID` where `status == 'ACTIVE' \| 'RETURNED'` | `apartmentId: ASC, status: ASC` | Chave dinâmica de status conforme a aba |
 | **Admin.tsx** | `apartments` | N/A | Ordenação em memória (`sort` JS) para evitar erro de índice |
 | **Admin.tsx** | `users`, `blocks`, `locations` | N/A | Ordenação em memória para garantir performance global |
 
@@ -69,7 +73,7 @@ Este documento contém o levantamento técnico detalhado das dependências Fireb
 | Entidade | Resident (Read) | Resident (Write) | Admin (Full) | Condição Especial |
 | :--- | :--- | :--- | :--- | :--- |
 | **users** | Só o próprio | Campos limitados (name, residency) | Sim | Bloqueia auto-promoção para ADMIN |
-| **books** | Todos | Apenas campos de localização no return | Sim | Valida transição de status |
+| **books** | Todos | Apenas campos de localização e loan info no return/loan | Sim | Valida transição de status |
 | **book_loans** | Todos | Create (próprio) / Update (Renew/Return) | Sim | Só cria se livro estiver AVAILABLE |
 | **apartments** | Todos | Não | Sim | Apenas leitura para moradores |
 | **blocks** | Todos | Não | Sim | Apenas leitura para moradores |

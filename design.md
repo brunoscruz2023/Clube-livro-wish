@@ -1,9 +1,12 @@
 # Documento de Design, Sistema de Biblioteca Comunitária (FONTE DE VERDADE DO DOMÍNIO)
 Doc-ID: DESIGN-BOOKCLUB
-Versão: v1.4
-Atualizado em: 2026-05-08
+Versão: v1.7
+Atualizado em: 2026-05-13
 
 ## Changelog
+- v1.7: corrigiu a exibição da identificação da unidade (Número do Apto e Bloco) no cabeçalho da tela de Meus Empréstimos, substituindo o ID técnico por labels amigáveis.
+- v1.6: introduziu componente `BookCard.tsx` para consistência visual entre Catálogo e Histórico de Empréstimos, alinhando a interface mobile para exibição em 2 colunas em ambas as telas.
+- v1.5: adicionou campos `loanedToApartmentId` e `loanedToApartmentLabel` à entidade `books` e corrigiu query de histórico em `MyLoans.tsx`.
 - v1.4: normalizou Markdown (sem escapes) e consolidou prazo inicial de empréstimo em 14 dias como único valor válido.
 - v1.2: alinhou prazo inicial de empréstimo para 14 dias.
 - v1.1: fechou contrato de localização física do livro quando AVAILABLE.
@@ -28,8 +31,8 @@ O sistema permite que moradores visualizem o catálogo de livros disponíveis no
 ## 3. Modelo de Dados (Firestore) (AS-IS)
 Entidades principais:
 - `users`: `name`, `email`, `role`, `active`, `apartmentId`, `residencyNote`, `createdAt`, `updatedAt`
-- `books`: `title`, `author`, `isbn`, `barcode`, `status`, `availableLocationType`, `availableLocationLabel`
-- `book_loans`: `bookId`, `apartmentId`, `borrowerUserId`, `status`, `loanedAt`, `dueAt`, `renewalCount`, (`lastRenewedAt`, `updatedAt` se existirem)
+- `books`: `title`, `author`, `isbn`, `barcode`, `status`, `availableLocationType`, `availableLocationLabel`, `loanedToApartmentId`, `loanedToApartmentLabel`
+- `book_loans`: `bookId`, `apartmentId`, `borrowerUserId`, `status`, `loanedAt`, `dueAt`, `renewalCount`, `returnedAt`, `returnLocationType`, `returnLocationLabel`, `updatedAt`
 - `apartments`: `number`, `blockId`, `active`
 - `blocks`: `name`, `active`
 - `locations`: `name`, `active`
@@ -60,16 +63,20 @@ Entidades principais:
 ### Processo de Empréstimo
 1. Morador escolhe um livro disponível no catálogo
 2. Confirma a solicitação, criando `book_loans` e alterando `books.status` para `LOANED`
-3. O prazo inicial é de **14 dias**
+3. O sistema sincroniza `loanedToApartmentLabel` no livro para exibição imediata no catálogo.
+4. O prazo inicial é de **14 dias**
 
 ---
 
 ## 6. Melhorias e Ajustes Recentes (AS-IS)
-- Segurança de Regras: rules do Firestore impedem cadastros maliciosos de se tornarem administradores automaticamente
-- Persistência de Dados: correção no fluxo de registro para garantir gravação do perfil no Firestore antes de qualquer logout
-- UX de Bloqueio: tela informativa no lugar de logout imediato para usuários aguardando aprovação
-- Performance de Consultas: Admin carrega listas grandes ordenadas em memória para evitar erros de índice
-- Tratamento de Erros: `handleFirestoreError` para diagnósticos em falha de permissão
+- Identificação de Unidade: melhoria na exibição do número do apartamento e bloco no cabeçalho da página de empréstimos do morador, garantindo que o usuário veja "Apto 101 - Bloco A" em vez de um UUID.
+- Componentização de UI: introdução do `BookCard.tsx` para garantir que o catálogo e o histórico de leitura sigam o mesmo padrão visual e densidade de informação.
+- Consistência Mobile: alinhamento do grid do Histórico de Leitura para 2 colunas em telas pequenas, melhorando a navegabilidade em dispositivos móveis.
+- Segurança de Regras: rules do Firestore agora permitem atualização dos campos de localização e posse pelos moradores durante o fluxo de empréstimo.
+- Histórico de Leitura: correção na query de `MyLoans.tsx` para filtrar corretamente por status `RETURNED` na aba de histórico.
+- Experiência do Catálogo: exibição dinâmica da unidade que está com o livro (Apto + Bloco) no lugar de label genérico.
+- Persistência de Dados: correção no fluxo de registro para garantir gravação do perfil no Firestore antes de qualquer logout.
+- Performance de Consultas: Admin carrega listas grandes ordenadas em memória para evitar erros de índice.
 
 ---
 

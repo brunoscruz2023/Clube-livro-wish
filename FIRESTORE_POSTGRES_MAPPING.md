@@ -44,6 +44,8 @@ Catálogo de livros físicos.
 | `status` | `status` | `TEXT` | ENUM: 'AVAILABLE', 'LOANED', 'INACTIVE' |
 | `availableLocationType` | `available_location_type` | `TEXT` | Categoria do local |
 | `availableLocationLabel`| `available_location_label_legacy` | `TEXT` | Descrição textual herdada |
+| `loanedToApartmentId` | `loaned_to_apartment_id` | `UUID` | FK para apartments |
+| `loanedToApartmentLabel`| `loaned_to_apartment_label` | `TEXT` | Nome amigável do destino |
 | `createdAt` | `created_at` | `TIMESTAMPTZ` | |
 | `updatedAt` | `updated_at` | `TIMESTAMPTZ` | |
 | **(NOVO)** | `condo_id` | `UUID` | FK para `condos` |

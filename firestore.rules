@@ -107,7 +107,7 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isAdmin();
       allow update: if (
-        isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'availableLocationType', 'availableLocationBlockId', 'availableLocationLabel']) &&
+        isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'availableLocationType', 'availableLocationBlockId', 'availableLocationLabel', 'loanedToApartmentId', 'loanedToApartmentLabel']) &&
         incoming().status in ['AVAILABLE', 'LOANED'] &&
         incoming().updatedAt == request.time
       );
