@@ -4,6 +4,8 @@ Versão: v1.8
 Atualizado em: 2026-05-13
 
 ## Changelog
+- v1.11: padronização visual das capas dos livros (aspect-ratio 3:4 e alinhamento superior) no BookCard e no seletor de candidatos, garantindo uma grade uniforme e profissional.
+- v1.10: implementada interface de seleção para múltiplos candidatos de metadados de livros (ISBN) com lógica de "Smart Merge", permitindo ao administrador escolher o melhor resultado e complementar campos vazios com dados de outras fontes.
 - v1.9: refatorada a integração com APIs de livros para utilizar um proxy no backend (Express), ocultando a API Key do navegador e centralizando as requisições.
 - v1.8: adicionado suporte a escaneamento de código de barras (ISBN) e integração com APIs externas (Google Books/OpenLibrary) para cadastro automatizado de livros.
 - v1.7: corrigiu a exibição da identificação da unidade (Número do Apto e Bloco) no cabeçalho da tela de Meus Empréstimos, substituindo o ID técnico por labels amigáveis.
@@ -70,8 +72,9 @@ Entidades principais:
 
 ### Cadastro de Livros (ADMIN)
 1. Administrador pode cadastrar livros manualmente ou via escaneamento de código de barras.
-2. O sistema utiliza a API do **Google Books** e **OpenLibrary** para buscar metadados (Título, Autor, Capa, Categoria, ISBN) através de um **proxy no backend (`/api/books/:isbn`)**, garantindo a segurança das chaves de API e centralizando a lógica de fallback.
-3. Se disponível, a imagem da contracapa pode ser anexada como metadado adicional.
+2. O sistema utiliza a API do **Google Books** e **OpenLibrary** para buscar metadados (Título, Autor, Capa, Categoria, ISBN) através de um **proxy no backend (`/api/books/:isbn`)**.
+3. **Casos de múltiplos resultados**: Quando o ISBN retorna mais de um candidato (Google Books/OpenLibrary), o sistema apresenta uma interface de seleção. Ao escolher uma opção, o sistema realiza um **Smart Merge**, preenchendo automaticamente campos vazios (como Capa ou Categoria) com informações presentes nos outros candidatos encontrados.
+4. Se disponível, a imagem da contracapa pode ser anexada como metadado adicional.
 4. O recurso de scanner é componenteizado para permitir futura liberação a outros perfis de usuário.
 
 ---
@@ -79,7 +82,7 @@ Entidades principais:
 ## 6. Melhorias e Ajustes Recentes (AS-IS)
 - Scanner de Código de Barras: implementação de POC de scanner (html5-qrcode) e serviço de integração com Google Books API e OpenLibrary para reduzir o esforço de cadastro de novos livros.
 - Identificação de Unidade: melhoria na exibição do número do apartamento e bloco no cabeçalho da página de empréstimos do morador, garantindo que o usuário veja "Apto 101 - Bloco A" em vez de um UUID.
-- Componentização de UI: introdução do `BookCard.tsx` para garantir que o catálogo e o histórico de leitura sigam o mesmo padrão visual e densidade de informação.
+- Componentização de UI: introdução do `BookCard.tsx` para garantir que o catálogo e o histórico de leitura sigam o mesmo padrão visual e densidade de informação. Implementada padronização de imagens (aspect-ratio 3/4 e alinhamento `object-top`) para garantir que capas de diferentes fontes não quebrem o alinhamento da grade.
 - Consistência Mobile: alinhamento do grid do Histórico de Leitura para 2 colunas em telas pequenas, melhorando a navegabilidade em dispositivos móveis.
 - Segurança de Regras: rules do Firestore agora permitem atualização dos campos de localização e posse pelos moradores durante o fluxo de empréstimo.
 - Histórico de Leitura: correção na query de `MyLoans.tsx` para filtrar corretamente por status `RETURNED` na aba de histórico.

@@ -34,14 +34,14 @@ export function BookCard({
         className
       )}
     >
-      <div className="aspect-[3/4] w-full bg-slate-100 overflow-hidden relative">
+      <div className="relative aspect-[3/4] w-full flex-shrink-0 overflow-hidden bg-slate-100">
         {/* Actual Cover or Placeholder */}
         {book.coverUrl ? (
           <img 
             src={book.coverUrl} 
             alt={book.title}
             referrerPolicy="no-referrer"
-            className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+            className="absolute inset-0 h-full w-full object-cover object-top transition-transform duration-500 group-hover:scale-110"
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-slate-300 group-hover:scale-110 transition-transform duration-500">

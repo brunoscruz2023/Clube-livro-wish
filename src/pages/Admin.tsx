@@ -36,10 +36,10 @@ import {
   Image as ImageIcon
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Location } from '../types';
 import { BarcodeScanner } from '../components/BarcodeScanner';
-import { fetchBookDetailsByISBN } from '../services/bookDetails';
+import { fetchBookDetailsByISBN, ExternalBookInfo } from '../services/bookDetails';
 
 export function Admin() {
   const location = useLocation();
@@ -62,6 +62,7 @@ export function Admin() {
   const [showScanner, setShowScanner] = useState(false);
   const [fetchingBook, setFetchingBook] = useState(false);
   const [lastScannedBook, setLastScannedBook] = useState<any>(null);
+  const [bookCandidates, setBookCandidates] = useState<ExternalBookInfo[]>([]);
 
   // Refs for Add Book form to allow programmatic filling
   const titleRef = React.useRef<HTMLInputElement>(null);
@@ -229,26 +230,24 @@ export function Admin() {
     console.log(`[Admin] Barcode recebido no componente: ${barcode}`);
     setShowScanner(false);
     setFetchingBook(true);
+    setBookCandidates([]);
     
     // Fill barcode field
     if (barcodeRef.current) {
-      console.log(`[Admin] Preenchendo campo de barcode...`);
       barcodeRef.current.value = barcode;
-    } else {
-      console.warn(`[Admin] barcodeRef.current não encontrado!`);
     }
 
     try {
-      const bookInfo = await fetchBookDetailsByISBN(barcode);
-      console.log(`[Admin] Resultado da busca:`, bookInfo);
+      const candidates = await fetchBookDetailsByISBN(barcode);
+      console.log(`[Admin] Resultado da busca:`, candidates);
 
-      if (bookInfo) {
-        setLastScannedBook(bookInfo);
-        if (titleRef.current) titleRef.current.value = bookInfo.title;
-        if (authorRef.current) authorRef.current.value = Array.isArray(bookInfo.author) ? bookInfo.author.join(', ') : bookInfo.author;
-        if (categoryRef.current) categoryRef.current.value = Array.isArray(bookInfo.category) ? bookInfo.category.join(', ') : bookInfo.category;
-        if (coverUrlRef.current) coverUrlRef.current.value = bookInfo.coverUrl;
-        console.log(`[Admin] Campos preenchidos com sucesso.`);
+      if (candidates && candidates.length > 0) {
+        if (candidates.length === 1) {
+          applyBookInfo(candidates[0]);
+        } else {
+          // Mostrar seletor para múltiplos resultados
+          setBookCandidates(candidates);
+        }
       } else {
         console.warn(`[Admin] Nenhum dado retornado para o ISBN ${barcode}`);
       }
@@ -257,6 +256,47 @@ export function Admin() {
     }
     
     setFetchingBook(false);
+  };
+
+  const applyBookInfo = (info: ExternalBookInfo) => {
+    console.log(`[Admin] Aplicando informações do livro com Smart Merge:`, info);
+    
+    // Smart Merge: Se campos estiverem vazios na seleção atual, busca nos outros candidatos
+    const mergedInfo = { ...info };
+    
+    bookCandidates.forEach(candidate => {
+      if (!mergedInfo.title && candidate.title) mergedInfo.title = candidate.title;
+      
+      const isAuthorEmpty = !mergedInfo.author || (Array.isArray(mergedInfo.author) && mergedInfo.author.length === 0);
+      if (isAuthorEmpty && candidate.author && (!Array.isArray(candidate.author) || candidate.author.length > 0)) {
+        mergedInfo.author = candidate.author;
+      }
+      
+      const isCategoryEmpty = !mergedInfo.category || (Array.isArray(mergedInfo.category) && mergedInfo.category.length === 0);
+      if (isCategoryEmpty && candidate.category && (!Array.isArray(candidate.category) || candidate.category.length > 0)) {
+        mergedInfo.category = candidate.category;
+      }
+      
+      if (!mergedInfo.description && candidate.description) mergedInfo.description = candidate.description;
+      if (!mergedInfo.coverUrl && candidate.coverUrl) mergedInfo.coverUrl = candidate.coverUrl;
+    });
+
+    setLastScannedBook(mergedInfo);
+    
+    // Preencher os campos do formulário
+    if (titleRef.current) titleRef.current.value = mergedInfo.title || '';
+    if (authorRef.current) authorRef.current.value = Array.isArray(mergedInfo.author) ? mergedInfo.author.join(', ') : (mergedInfo.author || '');
+    if (categoryRef.current) categoryRef.current.value = Array.isArray(mergedInfo.category) ? mergedInfo.category.join(', ') : (mergedInfo.category || '');
+    if (coverUrlRef.current) {
+      coverUrlRef.current.value = mergedInfo.coverUrl || '';
+      console.log(`[Admin] URL da capa definida (Smart Merge): ${mergedInfo.coverUrl}`);
+    }
+    if (barcodeRef.current && mergedInfo.isbn) {
+      barcodeRef.current.value = mergedInfo.isbn;
+    }
+    
+    setBookCandidates([]);
+    console.log(`[Admin] Campos preenchidos com sucesso via Smart Merge.`);
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -426,6 +466,82 @@ export function Admin() {
           onClose={() => setShowScanner(false)} 
         />
       )}
+
+      {/* Book Candidate Selector Modal */}
+      <AnimatePresence>
+        {bookCandidates.length > 1 && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900">Múltiplos Resultados Encontrados</h3>
+                  <p className="text-sm text-slate-500">Selecione a melhor opção de metadados para este livro.</p>
+                </div>
+                <button onClick={() => setBookCandidates([])} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              <div className="overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+                {bookCandidates.map((candidate, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => applyBookInfo(candidate)}
+                    className="flex w-full items-start gap-4 rounded-2xl border border-slate-100 p-4 text-left transition-all hover:border-indigo-200 hover:bg-indigo-50 group"
+                  >
+                    <div className="h-24 w-16 flex-shrink-0 overflow-hidden rounded-lg bg-slate-100 shadow-sm">
+                      {candidate.coverUrl ? (
+                        <img src={candidate.coverUrl} alt={candidate.title} className="h-full w-full object-cover object-top" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-slate-300">
+                           <ImageIcon className="h-8 w-8" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-bold text-slate-900 group-hover:text-indigo-700 truncate">{candidate.title}</h4>
+                        {candidate.source && (
+                          <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 font-bold uppercase tracking-wider group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
+                            {candidate.source}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-slate-600">
+                        {Array.isArray(candidate.author) ? candidate.author.join(', ') : candidate.author}
+                      </p>
+                      {candidate.category && (
+                        <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                          {Array.isArray(candidate.category) ? candidate.category[0] : candidate.category}
+                        </p>
+                      )}
+                      {candidate.description && (
+                        <p className="mt-2 line-clamp-2 text-xs text-slate-500 leading-relaxed">
+                          {candidate.description}
+                        </p>
+                      )}
+                    </div>
+                    <div className="mt-auto self-center">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                        <ChevronRight className="h-5 w-5" />
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Painel Administrativo</h1>

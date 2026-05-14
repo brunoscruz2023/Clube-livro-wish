@@ -15,9 +15,10 @@ export interface ExternalBookInfo {
   isbn: string;
   category?: any;
   pageCount?: number;
+  source?: string;
 }
 
-export async function fetchBookDetailsByISBN(isbn: string): Promise<ExternalBookInfo | null> {
+export async function fetchBookDetailsByISBN(isbn: string): Promise<ExternalBookInfo[]> {
   const cleanIsbn = isbn.replace(/[^0-9X]/gi, '');
   console.log(`[BookService] Buscando ISBN via proxy: ${cleanIsbn} (Original: ${isbn})`);
   
@@ -43,42 +44,46 @@ export async function fetchBookDetailsByISBN(isbn: string): Promise<ExternalBook
     const response = await fetch(`/api/books/${cleanIsbn}`);
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     
-    const { source, data } = await response.json();
+    const results = await response.json();
+    const candidates: ExternalBookInfo[] = [];
 
-    // Log the raw response in the frontend for tracking, as before
-    await logAPI(source === 'google' ? 'Google Books (Proxy)' : 'OpenLibrary (Proxy)', data);
-
-    if (source === 'google' && data.totalItems > 0) {
-      const item = data.items[0].volumeInfo;
-      return {
-        title: item.title,
-        author: item.authors,
-        description: item.description,
-        coverUrl: item.imageLinks?.thumbnail,
-        isbn: isbn,
-        category: item.categories,
-        pageCount: item.pageCount
-      };
-    }
-
-    if (source === 'openlibrary') {
-      const olKey = `ISBN:${cleanIsbn}`;
-      if (data[olKey]) {
-        const item = data[olKey];
-        return {
-          title: item.title,
-          author: item.authors,
-          coverUrl: item.cover?.large || item.cover?.medium,
+    // Process Google results
+    if (results.google && results.google.totalItems > 0) {
+      await logAPI('Google Books (Proxy)', results.google);
+      results.google.items.forEach((item: any) => {
+        candidates.push({
+          title: item.volumeInfo.title,
+          author: item.volumeInfo.authors,
+          description: item.volumeInfo.description,
+          coverUrl: (item.volumeInfo.imageLinks?.thumbnail || item.volumeInfo.imageLinks?.smallThumbnail)?.replace('http://', 'https://'),
           isbn: isbn,
-          category: item.subjects
-        };
-      }
+          category: item.volumeInfo.categories,
+          pageCount: item.volumeInfo.pageCount,
+          source: 'Google Books'
+        });
+      });
     }
 
-    console.log(`[BookService] Nenhuma API retornou dados via proxy para este ISBN.`);
-    return null;
+    // Process OpenLibrary results
+    const olKey = `ISBN:${cleanIsbn}`;
+    if (results.openlibrary && results.openlibrary[olKey]) {
+      await logAPI('OpenLibrary (Proxy)', results.openlibrary);
+      const item = results.openlibrary[olKey];
+      candidates.push({
+        title: item.title,
+        author: item.authors?.map((a: any) => a.name) || [],
+        description: item.notes || item.subtitle,
+        coverUrl: (item.cover?.large || item.cover?.medium || item.cover?.small)?.replace('http://', 'https://'),
+        isbn: isbn,
+        category: item.subjects?.map((s: any) => s.name) || [],
+        source: 'OpenLibrary'
+      });
+    }
+
+    console.log(`[BookService] Total de candidatos encontrados: ${candidates.length}`);
+    return candidates;
   } catch (error) {
     console.error("[BookService] Erro fatal ao buscar detalhes via proxy:", error);
-    return null;
+    return [];
   }
 }

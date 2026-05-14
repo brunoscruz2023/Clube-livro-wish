@@ -19,21 +19,23 @@ async function startServer() {
     const apiKey = process.env.BOOKS_API_KEY;
 
     try {
-      // 1. Try Google Books API
-      const googleUrl = `https://www.googleapis.com/books/v1/volumes?q=isbn:${cleanIsbn}${apiKey ? `&key=${apiKey}` : ""}`;
-      const googleResponse = await fetch(googleUrl);
-      const googleData = await googleResponse.json();
+      const results: any = { google: null, openlibrary: null };
 
-      if (googleData.totalItems > 0) {
-        return res.json({ source: "google", data: googleData });
+      // Fetch from both in parallel
+      const [googleResponse, olResponse] = await Promise.allSettled([
+        fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${cleanIsbn}${apiKey ? `&key=${apiKey}` : ""}`),
+        fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${cleanIsbn}&format=json&jscmd=data`)
+      ]);
+
+      if (googleResponse.status === 'fulfilled' && googleResponse.value.ok) {
+        results.google = await googleResponse.value.json();
       }
 
-      // 2. Fallback: OpenLibrary
-      const olUrl = `https://openlibrary.org/api/books?bibkeys=ISBN:${cleanIsbn}&format=json&jscmd=data`;
-      const olResponse = await fetch(olUrl);
-      const olData = await olResponse.json();
+      if (olResponse.status === 'fulfilled' && olResponse.value.ok) {
+        results.openlibrary = await olResponse.value.json();
+      }
 
-      return res.json({ source: "openlibrary", data: olData });
+      res.json(results);
     } catch (error) {
       console.error("Error fetching book details:", error);
       res.status(500).json({ error: "Failed to fetch book details" });
