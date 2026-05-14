@@ -50,6 +50,9 @@ As regras de segurança do "Clube do Livro" utilizam um modelo de **Identidade B
 - **Read**: Todos os usuários autenticados.
 - **Write**: Exclusivo para Administradores.
 
+### Integrações de Terceiros (Proxy via Backend)
+- **Books API**: As chaves de API para serviços externos (como Google Books) são mantidas estritamente no servidor. O acesso frontend é realizado via proxy (`/api/books/:isbn`), protegendo a `BOOKS_API_KEY` de exposição em rede pública.
+
 ---
 
 ## Lista de validações críticas

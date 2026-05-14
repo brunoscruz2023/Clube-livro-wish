@@ -31,11 +31,15 @@ import {
   Loader2,
   MapPin,
   ShieldAlert,
-  ShieldCheck
+  ShieldCheck,
+  ScanBarcode,
+  Image as ImageIcon
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion } from 'motion/react';
 import { Location } from '../types';
+import { BarcodeScanner } from '../components/BarcodeScanner';
+import { fetchBookDetailsByISBN } from '../services/bookDetails';
 
 export function Admin() {
   const location = useLocation();
@@ -55,6 +59,16 @@ export function Admin() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [showSeedConfirm, setShowSeedConfirm] = useState(false);
   const [showUserSeedConfirm, setShowUserSeedConfirm] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const [fetchingBook, setFetchingBook] = useState(false);
+  const [lastScannedBook, setLastScannedBook] = useState<any>(null);
+
+  // Refs for Add Book form to allow programmatic filling
+  const titleRef = React.useRef<HTMLInputElement>(null);
+  const authorRef = React.useRef<HTMLInputElement>(null);
+  const categoryRef = React.useRef<HTMLInputElement>(null);
+  const barcodeRef = React.useRef<HTMLInputElement>(null);
+  const coverUrlRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (initialAction === 'new-book') {
@@ -211,6 +225,40 @@ export function Admin() {
     }
   };
 
+  const handleBarcodeScan = async (barcode: string) => {
+    console.log(`[Admin] Barcode recebido no componente: ${barcode}`);
+    setShowScanner(false);
+    setFetchingBook(true);
+    
+    // Fill barcode field
+    if (barcodeRef.current) {
+      console.log(`[Admin] Preenchendo campo de barcode...`);
+      barcodeRef.current.value = barcode;
+    } else {
+      console.warn(`[Admin] barcodeRef.current não encontrado!`);
+    }
+
+    try {
+      const bookInfo = await fetchBookDetailsByISBN(barcode);
+      console.log(`[Admin] Resultado da busca:`, bookInfo);
+
+      if (bookInfo) {
+        setLastScannedBook(bookInfo);
+        if (titleRef.current) titleRef.current.value = bookInfo.title;
+        if (authorRef.current) authorRef.current.value = Array.isArray(bookInfo.author) ? bookInfo.author.join(', ') : bookInfo.author;
+        if (categoryRef.current) categoryRef.current.value = Array.isArray(bookInfo.category) ? bookInfo.category.join(', ') : bookInfo.category;
+        if (coverUrlRef.current) coverUrlRef.current.value = bookInfo.coverUrl;
+        console.log(`[Admin] Campos preenchidos com sucesso.`);
+      } else {
+        console.warn(`[Admin] Nenhum dado retornado para o ISBN ${barcode}`);
+      }
+    } catch (err) {
+      console.error(`[Admin] Erro ao buscar/preencher dados:`, err);
+    }
+    
+    setFetchingBook(false);
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (submitting) return;
@@ -221,11 +269,33 @@ export function Admin() {
     
     try {
       if (activeTab === 'BOOKS') {
+        const title = formData.get('title') as string;
+        const authorInput = formData.get('author') as string;
+        const categoryInput = formData.get('category') as string;
+
+        // Restore original structure if not modified
+        let authorValue: any = authorInput;
+        let categoryValue: any = categoryInput;
+
+        if (lastScannedBook) {
+          const originalAuthorString = Array.isArray(lastScannedBook.author) ? lastScannedBook.author.join(', ') : lastScannedBook.author;
+          if (authorInput === originalAuthorString) {
+            authorValue = lastScannedBook.author;
+          }
+
+          const originalCategoryString = Array.isArray(lastScannedBook.category) ? lastScannedBook.category.join(', ') : lastScannedBook.category;
+          if (categoryInput === originalCategoryString) {
+            categoryValue = lastScannedBook.category;
+          }
+        }
+
         const newBook = {
-          title: formData.get('title') as string,
-          author: formData.get('author') as string,
-          category: formData.get('category') as string,
+          title,
+          author: authorValue,
+          category: categoryValue,
           barcode: formData.get('barcode') as string,
+          coverUrl: formData.get('coverUrl') as string || '',
+          backCoverUrl: formData.get('backCoverUrl') as string || '',
           availableLocationType: formData.get('locationType') as string || 'HALL',
           availableLocationLabel: formData.get('locationLabel') as string || '',
           status: 'AVAILABLE',
@@ -300,6 +370,8 @@ export function Admin() {
         updates.author = formData.get('author') as string;
         updates.category = formData.get('category') as string;
         updates.barcode = formData.get('barcode') as string;
+        updates.coverUrl = formData.get('coverUrl') as string || '';
+        updates.backCoverUrl = formData.get('backCoverUrl') as string || '';
         updates.availableLocationType = formData.get('locationType') as string;
         updates.availableLocationLabel = formData.get('locationLabel') as string;
       } else if (activeTab === 'BLOCKS') {
@@ -348,6 +420,12 @@ export function Admin() {
 
   return (
     <div className="space-y-8">
+      {showScanner && (
+        <BarcodeScanner 
+          onScan={handleBarcodeScan} 
+          onClose={() => setShowScanner(false)} 
+        />
+      )}
       <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Painel Administrativo</h1>
@@ -465,12 +543,40 @@ export function Admin() {
 
         {showAddForm && (
           <form onSubmit={handleSubmit} className="border-b border-slate-100 bg-slate-50 p-6">
-             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+           <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-700">Novo Cadastro</h3>
+              {activeTab === 'BOOKS' && (
+                <button
+                  type="button"
+                  onClick={() => setShowScanner(true)}
+                  className="flex items-center gap-2 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition-colors"
+                >
+                  <ScanBarcode className="h-4 w-4" />
+                  Escanear ISBN
+                </button>
+              )}
+           </div>
+           
+           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {activeTab === 'BOOKS' && (
                   <>
-                    <input name="title" placeholder="Título" required className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
-                    <input name="author" placeholder="Autor" required className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
-                    <input name="category" placeholder="Categoria" className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
+                    <div className="relative">
+                      <input ref={titleRef} name="title" placeholder="Título" required className="w-full rounded-lg border border-slate-200 p-2 text-sm bg-white" />
+                      {fetchingBook && <Loader2 className="absolute right-2 top-2 h-4 w-4 animate-spin text-indigo-500" />}
+                    </div>
+                    <input ref={authorRef} name="author" placeholder="Autor" required className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
+                    <input ref={categoryRef} name="category" placeholder="Categoria" className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
+                    <input ref={barcodeRef} name="barcode" placeholder="Barcode / ISBN" className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
+                    
+                    <div className="relative">
+                      <ImageIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+                      <input ref={coverUrlRef} name="coverUrl" placeholder="URL da Capa" className="w-full rounded-lg border border-slate-200 p-2 pl-9 text-sm bg-white" />
+                    </div>
+                    <div className="relative">
+                      <ImageIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400 opacity-50" />
+                      <input name="backCoverUrl" placeholder="URL da Contracapa (Opcional)" className="w-full rounded-lg border border-slate-200 p-2 pl-9 text-sm bg-white" />
+                    </div>
+
                     <select name="locationType" className="rounded-lg border border-slate-200 p-2 text-sm bg-white">
                       <option value="HALL">Hall do Bloco</option>
                       <option value="APARTMENT">Apartamento</option>
@@ -548,6 +654,11 @@ export function Admin() {
                   <>
                     <input name="title" defaultValue={isEditing.title} placeholder="Título" required className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
                     <input name="author" defaultValue={isEditing.author} placeholder="Autor" required className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
+                    <input name="category" defaultValue={isEditing.category} placeholder="Categoria" className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
+                    <input name="barcode" defaultValue={isEditing.barcode} placeholder="ISBN" className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
+                    <input name="coverUrl" defaultValue={isEditing.coverUrl} placeholder="URL da Capa" className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
+                    <input name="backCoverUrl" defaultValue={isEditing.backCoverUrl} placeholder="URL da Contracapa" className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
+                    
                     <select name="locationType" defaultValue={isEditing.availableLocationType || 'HALL'} className="rounded-lg border border-slate-200 p-2 text-sm bg-white">
                       <option value="HALL">Hall do Bloco</option>
                       <option value="APARTMENT">Apartamento</option>

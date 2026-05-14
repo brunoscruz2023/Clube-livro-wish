@@ -1,9 +1,11 @@
 # Documento de Design, Sistema de Biblioteca Comunitária (FONTE DE VERDADE DO DOMÍNIO)
 Doc-ID: DESIGN-BOOKCLUB
-Versão: v1.7
+Versão: v1.8
 Atualizado em: 2026-05-13
 
 ## Changelog
+- v1.9: refatorada a integração com APIs de livros para utilizar um proxy no backend (Express), ocultando a API Key do navegador e centralizando as requisições.
+- v1.8: adicionado suporte a escaneamento de código de barras (ISBN) e integração com APIs externas (Google Books/OpenLibrary) para cadastro automatizado de livros.
 - v1.7: corrigiu a exibição da identificação da unidade (Número do Apto e Bloco) no cabeçalho da tela de Meus Empréstimos, substituindo o ID técnico por labels amigáveis.
 - v1.6: introduziu componente `BookCard.tsx` para consistência visual entre Catálogo e Histórico de Empréstimos, alinhando a interface mobile para exibição em 2 colunas em ambas as telas.
 - v1.5: adicionou campos `loanedToApartmentId` e `loanedToApartmentLabel` à entidade `books` e corrigiu query de histórico em `MyLoans.tsx`.
@@ -66,9 +68,16 @@ Entidades principais:
 3. O sistema sincroniza `loanedToApartmentLabel` no livro para exibição imediata no catálogo.
 4. O prazo inicial é de **14 dias**
 
+### Cadastro de Livros (ADMIN)
+1. Administrador pode cadastrar livros manualmente ou via escaneamento de código de barras.
+2. O sistema utiliza a API do **Google Books** e **OpenLibrary** para buscar metadados (Título, Autor, Capa, Categoria, ISBN) através de um **proxy no backend (`/api/books/:isbn`)**, garantindo a segurança das chaves de API e centralizando a lógica de fallback.
+3. Se disponível, a imagem da contracapa pode ser anexada como metadado adicional.
+4. O recurso de scanner é componenteizado para permitir futura liberação a outros perfis de usuário.
+
 ---
 
 ## 6. Melhorias e Ajustes Recentes (AS-IS)
+- Scanner de Código de Barras: implementação de POC de scanner (html5-qrcode) e serviço de integração com Google Books API e OpenLibrary para reduzir o esforço de cadastro de novos livros.
 - Identificação de Unidade: melhoria na exibição do número do apartamento e bloco no cabeçalho da página de empréstimos do morador, garantindo que o usuário veja "Apto 101 - Bloco A" em vez de um UUID.
 - Componentização de UI: introdução do `BookCard.tsx` para garantir que o catálogo e o histórico de leitura sigam o mesmo padrão visual e densidade de informação.
 - Consistência Mobile: alinhamento do grid do Histórico de Leitura para 2 colunas em telas pequenas, melhorando a navegabilidade em dispositivos móveis.

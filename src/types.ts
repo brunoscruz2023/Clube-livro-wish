@@ -57,10 +57,12 @@ export interface Location {
 export interface Book {
   id: string;
   title: string;
-  author: string;
+  author: any;
   isbn?: string;
   barcode?: string;
-  category?: string;
+  category?: any;
+  coverUrl?: string;
+  backCoverUrl?: string;
   status: BookStatus;
   availableLocationType?: LocationType;
   availableLocationBlockId?: string;

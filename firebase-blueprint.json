@@ -111,6 +111,18 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["bookId", "apartmentId", "borrowerUserId", "loanedAt", "dueAt", "renewalCount", "status"]
+    },
+    "APILog": {
+      "title": "API Log",
+      "description": "Stores raw API responses from book searches.",
+      "type": "object",
+      "properties": {
+        "isbn": { "type": "string" },
+        "apiName": { "type": "string" },
+        "rawResponse": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["isbn", "apiName", "rawResponse", "createdAt"]
     }
   },
   "firestore": {
@@ -141,6 +153,10 @@
     "book_loans": {
       "schema": "BookLoan",
       "description": "Collection of loan transactions."
+    },
+    "api_logs": {
+      "schema": "APILog",
+      "description": "Logs of external API requests."
     }
   }
 }

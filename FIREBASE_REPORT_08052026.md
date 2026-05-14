@@ -92,7 +92,7 @@ Este documento contém o levantamento técnico detalhado das dependências Fireb
 - Restrição de `UPDATE` por colunas específicas (`affectedKeys`).
 
 ### 7.5 Functions / Storage / Outros
-- **Functions**: NÃO ENCONTRADO NO CÓDIGO. Toda a lógica é client-side com Firestore Transactions.
+- **Functions / Backend API**: Implementada rota `/api/books/:isbn` no `server.ts` que atua como proxy para Google Books e OpenLibrary, permitindo o uso seguro de chaves de API restritas ao servidor.
 - **Storage**: NÃO ENCONTRADO NO CÓDIGO. Não há upload de capas ou fotos de perfil no momento.
 - **Outros**: Uso intensivo de `serverTimestamp()` para auditoria em todas as coleções.
 
