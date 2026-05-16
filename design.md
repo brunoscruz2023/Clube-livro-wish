@@ -1,9 +1,14 @@
 # Documento de Design, Sistema de Biblioteca Comunitária (FONTE DE VERDADE DO DOMÍNIO)
 Doc-ID: DESIGN-BOOKCLUB
-Versão: v1.8
-Atualizado em: 2026-05-13
+Versão: v1.16
+Atualizado em: 2026-05-15
 
 ## Changelog
+- v1.16: encerrado processo de backfill automático; campo `descricao` agora é populado obrigatoriamente durante o cadastro inicial via metadados de API.
+- v1.15: implementada captura automática de descrição (campo `descricao`) de livros via metadados de API.
+- v1.14: refinada hierarquia de locais com prefixo "Hall " automático e lógica de reset de formulário no Admin.
+- v1.13: implementada hierarquia dinâmica de locais no cadastro de livros (Blocos/Apartamentos) e remoção definitiva de dados de exemplo.
+- v1.12: suporte a pesquisa manual de ISBN com botão dinâmico e modal de feedback para livros não localizados nas APIs integradas.
 - v1.11: padronização visual das capas dos livros (aspect-ratio 3:4 e alinhamento superior) no BookCard e no seletor de candidatos, garantindo uma grade uniforme e profissional.
 - v1.10: implementada interface de seleção para múltiplos candidatos de metadados de livros (ISBN) com lógica de "Smart Merge", permitindo ao administrador escolher o melhor resultado e complementar campos vazios com dados de outras fontes.
 - v1.9: refatorada a integração com APIs de livros para utilizar um proxy no backend (Express), ocultando a API Key do navegador e centralizando as requisições.
@@ -35,11 +40,12 @@ O sistema permite que moradores visualizem o catálogo de livros disponíveis no
 ## 3. Modelo de Dados (Firestore) (AS-IS)
 Entidades principais:
 - `users`: `name`, `email`, `role`, `active`, `apartmentId`, `residencyNote`, `createdAt`, `updatedAt`
-- `books`: `title`, `author`, `isbn`, `barcode`, `status`, `availableLocationType`, `availableLocationLabel`, `loanedToApartmentId`, `loanedToApartmentLabel`
+- `books`: `title`, `author`, `isbn`, `barcode`, `status`, `availableLocationType`, `availableLocationLabel`, `loanedToApartmentId`, `loanedToApartmentLabel`, `descricao` (audit/metadata)
 - `book_loans`: `bookId`, `apartmentId`, `borrowerUserId`, `status`, `loanedAt`, `dueAt`, `renewalCount`, `returnedAt`, `returnLocationType`, `returnLocationLabel`, `updatedAt`
 - `apartments`: `number`, `blockId`, `active`
 - `blocks`: `name`, `active`
 - `locations`: `name`, `active`
+- `api_logs`: `isbn`, `rawResponse` (JSON), `userId`, `userEmail`, `createdAt`
 
 ---
 
@@ -71,11 +77,16 @@ Entidades principais:
 4. O prazo inicial é de **14 dias**
 
 ### Cadastro de Livros (ADMIN)
-1. Administrador pode cadastrar livros manualmente ou via escaneamento de código de barras.
-2. O sistema utiliza a API do **Google Books** e **OpenLibrary** para buscar metadados (Título, Autor, Capa, Categoria, ISBN) através de um **proxy no backend (`/api/books/:isbn`)**.
-3. **Casos de múltiplos resultados**: Quando o ISBN retorna mais de um candidato (Google Books/OpenLibrary), o sistema apresenta uma interface de seleção. Ao escolher uma opção, o sistema realiza um **Smart Merge**, preenchendo automaticamente campos vazios (como Capa ou Categoria) com informações presentes nos outros candidatos encontrados.
-4. Se disponível, a imagem da contracapa pode ser anexada como metadado adicional.
-4. O recurso de scanner é componenteizado para permitir futura liberação a outros perfis de usuário.
+1. Administrador pode cadastrar livros manualmente ou via escaneamento de código de barras ou digitação manual do ISBN.
+2. O sistema utiliza a API do **Google Books** e **OpenLibrary** para buscar metadados.
+3. **Busca Manual**: O botão alterna dinamicamente para "Pesquisar ISBN" quando há texto no input de Barcode.
+4. **Hierarquia de Locais**: O administrador seleciona o tipo de local (Hall ou Apartamento) e o sistema filtra as opções dinamicamente:
+    - **HALL**: Lista os Blocos cadastrados com o prefixo "Hall " automático (ex: "Hall Bloco A").
+    - **APARTMENT**: Lista todos os Apartamentos (formato "Apto XXX - Bloco Y").
+5. **Casos de múltiplos resultados**: Interface de seleção com **Smart Merge**.
+6. **Livro não localizado**: Modal de alerta caso as APIs retornem vazio.
+7. O recurso de scanner é componenteizado.
+8. **Reset de Formulário**: Ao cancelar ou salvar, todos os campos (incluindo ISBN e seletores de local) são limpos para o próximo cadastro.
 
 ---
 

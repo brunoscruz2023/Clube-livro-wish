@@ -85,8 +85,13 @@
         "loanedToApartmentId": { "type": "string" },
         "loanedToApartmentLabel": { "type": "string" },
         "notes": { "type": "string" },
+        "descricao": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdByUserId": { "type": "string" },
+        "createdByUserEmail": { "type": "string" },
+        "updatedByUserId": { "type": "string" },
+        "updatedByUserEmail": { "type": "string" }
       },
       "required": ["title", "author", "status"]
     },

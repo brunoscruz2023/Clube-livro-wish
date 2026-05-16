@@ -4,7 +4,7 @@
  */
 
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db, handleFirestoreError } from '../lib/firebase';
+import { db, handleFirestoreError, auth } from '../lib/firebase';
 import { OperationType } from '../types';
 
 export interface ExternalBookInfo {
@@ -22,34 +22,29 @@ export async function fetchBookDetailsByISBN(isbn: string): Promise<ExternalBook
   const cleanIsbn = isbn.replace(/[^0-9X]/gi, '');
   console.log(`[BookService] Buscando ISBN via proxy: ${cleanIsbn} (Original: ${isbn})`);
   
-  const logAPI = async (apiName: string, rawResponse: any) => {
-    try {
-      await addDoc(collection(db, 'api_logs'), {
-        isbn,
-        apiName,
-        rawResponse,
-        createdAt: serverTimestamp()
-      });
-    } catch (error) {
-      console.error(`[BookService] Erro ao gravar log para ${apiName}:`, error);
-      try {
-        handleFirestoreError(error, OperationType.WRITE, 'api_logs');
-      } catch (e) {
-        // Silently continue
-      }
-    }
-  };
-
   try {
     const response = await fetch(`/api/books/${cleanIsbn}`);
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     
     const results = await response.json();
+    
+    // Log do resultado bruto para auditoria e enriquecimento posterior
+    try {
+      await addDoc(collection(db, 'api_logs'), {
+        isbn: cleanIsbn,
+        rawResponse: results,
+        userId: auth.currentUser?.uid || null,
+        userEmail: auth.currentUser?.email || null,
+        createdAt: serverTimestamp()
+      });
+    } catch (logError) {
+      console.warn('[BookService] Falha ao gravar log de API:', logError);
+    }
+
     const candidates: ExternalBookInfo[] = [];
 
     // Process Google results
-    if (results.google && results.google.totalItems > 0) {
-      await logAPI('Google Books (Proxy)', results.google);
+    if (results.google && results.google.items) {
       results.google.items.forEach((item: any) => {
         candidates.push({
           title: item.volumeInfo.title,
@@ -67,7 +62,6 @@ export async function fetchBookDetailsByISBN(isbn: string): Promise<ExternalBook
     // Process OpenLibrary results
     const olKey = `ISBN:${cleanIsbn}`;
     if (results.openlibrary && results.openlibrary[olKey]) {
-      await logAPI('OpenLibrary (Proxy)', results.openlibrary);
       const item = results.openlibrary[olKey];
       candidates.push({
         title: item.title,

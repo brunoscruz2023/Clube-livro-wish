@@ -70,8 +70,13 @@ export interface Book {
   loanedToApartmentId?: string;
   loanedToApartmentLabel?: string;
   notes?: string;
+  descricao?: string;
   createdAt: any;
   updatedAt: any;
+  createdByUserId?: string | null;
+  createdByUserEmail?: string | null;
+  updatedByUserId?: string | null;
+  updatedByUserEmail?: string | null;
 }
 
 export type LoanStatus = 'ACTIVE' | 'RETURNED';

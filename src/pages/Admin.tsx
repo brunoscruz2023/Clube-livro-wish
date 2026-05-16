@@ -11,11 +11,13 @@ import {
   serverTimestamp,
   deleteDoc,
   query,
+  where,
   orderBy,
   writeBatch
 } from 'firebase/firestore';
-import { db, handleFirestoreError } from '../lib/firebase';
+import { db, handleFirestoreError, auth } from '../lib/firebase';
 import { 
+  Search,
   Settings, 
   Users, 
   Building, 
@@ -63,6 +65,9 @@ export function Admin() {
   const [fetchingBook, setFetchingBook] = useState(false);
   const [lastScannedBook, setLastScannedBook] = useState<any>(null);
   const [bookCandidates, setBookCandidates] = useState<ExternalBookInfo[]>([]);
+  const [selectedLocationType, setSelectedLocationType] = useState<'HALL' | 'APARTMENT'>('HALL');
+  const [isbnValue, setIsbnValue] = useState('');
+  const [showNotFound, setShowNotFound] = useState(false);
 
   // Refs for Add Book form to allow programmatic filling
   const titleRef = React.useRef<HTMLInputElement>(null);
@@ -89,6 +94,8 @@ export function Admin() {
     }
     if (activeTab === 'BOOKS') {
       loadLocations();
+      loadBlocks();
+      loadApartments();
     }
   }, [activeTab]);
 
@@ -155,6 +162,14 @@ export function Admin() {
     }
     setLoading(false);
   }
+
+  const closeAddForm = () => {
+    setShowAddForm(false);
+    setIsbnValue('');
+    setLastScannedBook(null);
+    setBookCandidates([]);
+    setSelectedLocationType('HALL');
+  };
 
   const handleSeedData = async () => {
     setShowSeedConfirm(false);
@@ -250,6 +265,7 @@ export function Admin() {
         }
       } else {
         console.warn(`[Admin] Nenhum dado retornado para o ISBN ${barcode}`);
+        setShowNotFound(true);
       }
     } catch (err) {
       console.error(`[Admin] Erro ao buscar/preencher dados:`, err);
@@ -293,6 +309,7 @@ export function Admin() {
     }
     if (barcodeRef.current && mergedInfo.isbn) {
       barcodeRef.current.value = mergedInfo.isbn;
+      setIsbnValue(mergedInfo.isbn);
     }
     
     setBookCandidates([]);
@@ -338,10 +355,13 @@ export function Admin() {
           backCoverUrl: formData.get('backCoverUrl') as string || '',
           availableLocationType: formData.get('locationType') as string || 'HALL',
           availableLocationLabel: formData.get('locationLabel') as string || '',
+          descricao: lastScannedBook?.description || '',
           status: 'AVAILABLE',
           active: true,
           createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
+          updatedAt: serverTimestamp(),
+          createdByUserId: auth.currentUser?.uid || null,
+          createdByUserEmail: auth.currentUser?.email || null
         };
         await addDoc(collection(db, 'books'), newBook);
       } else if (activeTab === 'BLOCKS') {
@@ -383,7 +403,7 @@ export function Admin() {
         await addDoc(collection(db, 'locations'), newLoc);
       }
 
-      setShowAddForm(false);
+      closeAddForm();
       loadData();
     } catch (error) {
        handleFirestoreError(error, OperationType.WRITE, collectionName);
@@ -402,7 +422,9 @@ export function Admin() {
     
     try {
       const updates: any = {
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
+        updatedByUserId: auth.currentUser?.uid || null,
+        updatedByUserEmail: auth.currentUser?.email || null
       };
       
       if (activeTab === 'BOOKS') {
@@ -460,6 +482,38 @@ export function Admin() {
 
   return (
     <div className="space-y-8">
+      {/* Not Found Modal */}
+      <AnimatePresence>
+        {showNotFound && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-2xl text-center"
+            >
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-red-600">
+                <Search className="h-8 w-8" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900">Livro não localizado</h3>
+              <p className="mt-2 text-slate-500">
+                Não encontramos informações automáticas para este ISBN nas bases de dados integradas.
+              </p>
+              <button 
+                onClick={() => setShowNotFound(false)}
+                className="mt-6 w-full rounded-xl bg-slate-900 py-3 font-bold text-white transition-all hover:bg-slate-800"
+              >
+                Entendido, vou digitar
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {showScanner && (
         <BarcodeScanner 
           onScan={handleBarcodeScan} 
@@ -649,12 +703,14 @@ export function Admin() {
               )}
             </div>
           </div>
-          <button 
-            onClick={() => setShowAddForm(true)}
-            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-indigo-700 transition-all"
-          >
-            <Plus className="h-4 w-4" /> Adicionar
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setShowAddForm(true)}
+              className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-indigo-700 transition-all"
+            >
+              <Plus className="h-4 w-4" /> Adicionar
+            </button>
+          </div>
         </div>
 
         {showAddForm && (
@@ -664,11 +720,29 @@ export function Admin() {
               {activeTab === 'BOOKS' && (
                 <button
                   type="button"
-                  onClick={() => setShowScanner(true)}
-                  className="flex items-center gap-2 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition-colors"
+                  onClick={() => {
+                    if (isbnValue) {
+                      handleBarcodeScan(isbnValue);
+                    } else {
+                      setShowScanner(true);
+                    }
+                  }}
+                  disabled={fetchingBook}
+                  className={cn(
+                    "flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-bold transition-all",
+                    isbnValue 
+                      ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-md" 
+                      : "bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                  )}
                 >
-                  <ScanBarcode className="h-4 w-4" />
-                  Escanear ISBN
+                  {fetchingBook ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : isbnValue ? (
+                    <Search className="h-4 w-4 text-white" />
+                  ) : (
+                    <ScanBarcode className="h-4 w-4" />
+                  )}
+                  {isbnValue ? 'Pesquisar ISBN' : 'Escanear ISBN'}
                 </button>
               )}
            </div>
@@ -682,7 +756,14 @@ export function Admin() {
                     </div>
                     <input ref={authorRef} name="author" placeholder="Autor" required className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
                     <input ref={categoryRef} name="category" placeholder="Categoria" className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
-                    <input ref={barcodeRef} name="barcode" placeholder="Barcode / ISBN" className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
+                    <input 
+                      ref={barcodeRef} 
+                      name="barcode" 
+                      placeholder="Barcode / ISBN" 
+                      className="rounded-lg border border-slate-200 p-2 text-sm bg-white"
+                      value={isbnValue}
+                      onChange={(e) => setIsbnValue(e.target.value)}
+                    />
                     
                     <div className="relative">
                       <ImageIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
@@ -693,17 +774,33 @@ export function Admin() {
                       <input name="backCoverUrl" placeholder="URL da Contracapa (Opcional)" className="w-full rounded-lg border border-slate-200 p-2 pl-9 text-sm bg-white" />
                     </div>
 
-                    <select name="locationType" className="rounded-lg border border-slate-200 p-2 text-sm bg-white">
+                    <select 
+                      name="locationType" 
+                      className="rounded-lg border border-slate-200 p-2 text-sm bg-white"
+                      value={selectedLocationType}
+                      onChange={(e) => setSelectedLocationType(e.target.value as 'HALL' | 'APARTMENT')}
+                    >
                       <option value="HALL">Hall do Bloco</option>
                       <option value="APARTMENT">Apartamento</option>
                     </select>
                     <div className="flex flex-col gap-1">
-                      <select name="locationLabel" className="rounded-lg border border-slate-200 p-2 text-sm bg-white">
+                      <select name="locationLabel" required className="rounded-lg border border-slate-200 p-2 text-sm bg-white">
                         <option value="">Selecione o Local</option>
-                        {locations.map(loc => (
-                          <option key={loc.id} value={loc.name}>{loc.name}</option>
-                        ))}
-                        <option value="Hall do Bloco A">Hall do Bloco A (Exemplo)</option>
+                        {selectedLocationType === 'HALL' ? (
+                          // Deduplicate labels from both Blocks (as Halls) and Locations collection
+                          Array.from(new Set([
+                            ...blocks.map(block => `Hall ${block.name}`),
+                            ...locations.filter(l => l.active).map(loc => loc.name)
+                          ])).sort().map(label => (
+                            <option key={label} value={label}>{label}</option>
+                          ))
+                        ) : (
+                          apartments.map(apt => {
+                            const block = blocks.find(b => b.id === apt.blockId);
+                            const label = `Apto ${apt.number}${block ? ` - ${block.name}` : ''}`;
+                            return <option key={apt.id} value={label}>{label}</option>;
+                          })
+                        )}
                       </select>
                       <p className="text-[10px] text-slate-400">Localização física do livro</p>
                     </div>
@@ -757,7 +854,7 @@ export function Admin() {
                     'Local'
                   }
                 </button>
-                <button type="button" onClick={() => setShowAddForm(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold">Cancelar</button>
+                <button type="button" onClick={closeAddForm} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold">Cancelar</button>
              </div>
           </form>
         )}
@@ -775,16 +872,34 @@ export function Admin() {
                     <input name="coverUrl" defaultValue={isEditing.coverUrl} placeholder="URL da Capa" className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
                     <input name="backCoverUrl" defaultValue={isEditing.backCoverUrl} placeholder="URL da Contracapa" className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
                     
-                    <select name="locationType" defaultValue={isEditing.availableLocationType || 'HALL'} className="rounded-lg border border-slate-200 p-2 text-sm bg-white">
+                    <select 
+                      name="locationType" 
+                      defaultValue={isEditing.availableLocationType || 'HALL'} 
+                      className="rounded-lg border border-slate-200 p-2 text-sm bg-white"
+                      onChange={(e) => setSelectedLocationType(e.target.value as 'HALL' | 'APARTMENT')}
+                    >
                       <option value="HALL">Hall do Bloco</option>
                       <option value="APARTMENT">Apartamento</option>
                     </select>
-                    <select name="locationLabel" defaultValue={isEditing.availableLocationLabel} className="rounded-lg border border-slate-200 p-2 text-sm bg-white">
+                    <select name="locationLabel" defaultValue={isEditing.availableLocationLabel} required className="rounded-lg border border-slate-200 p-2 text-sm bg-white">
                       <option value="">Selecione o Local</option>
-                      {locations.map(loc => (
-                        <option key={loc.id} value={loc.name}>{loc.name}</option>
-                      ))}
-                      {!locations.find(l => l.name === isEditing.availableLocationLabel) && isEditing.availableLocationLabel && (
+                      {selectedLocationType === 'HALL' ? (
+                        Array.from(new Set([
+                          ...blocks.map(block => `Hall ${block.name}`),
+                          ...locations.filter(l => l.active).map(loc => loc.name)
+                        ])).sort().map(label => (
+                          <option key={label} value={label}>{label}</option>
+                        ))
+                      ) : (
+                        apartments.map(apt => {
+                          const block = blocks.find(b => b.id === apt.blockId);
+                          const label = `Apto ${apt.number}${block ? ` - ${block.name}` : ''}`;
+                          return <option key={apt.id} value={label}>{label}</option>;
+                        })
+                      )}
+                      {!locations.find(l => l.name === isEditing.availableLocationLabel) && 
+                       !blocks.find(b => `Hall ${b.name}` === isEditing.availableLocationLabel) &&
+                       isEditing.availableLocationLabel && (
                         <option value={isEditing.availableLocationLabel}>{isEditing.availableLocationLabel}</option>
                       )}
                     </select>
@@ -946,6 +1061,7 @@ export function Admin() {
                          onClick={() => {
                            setIsEditing(item);
                            setShowAddForm(false);
+                           setSelectedLocationType(item.availableLocationType || 'HALL');
                          }}
                          className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-indigo-600 group-hover:shadow-sm transition-all"
                        >

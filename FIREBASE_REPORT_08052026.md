@@ -39,9 +39,19 @@ Este documento contém o levantamento técnico detalhado das dependências Fireb
 | | isbn/barcode | string | Não | Identificadores únicos |
 | | status | string | Sim | 'AVAILABLE', 'LOANED', 'INACTIVE' |
 | | availableLocationType | string | Não | Categoria do local onde o livro está |
-| | availableLocationLabel | string | Não | Descrição textual do local (ex: "Apto 101") |
+| | availableLocationLabel | string | Não | Descrição textual (ex: "Hall Bloco A" ou "Apto 101 - Bloco A") |
 | | loanedToApartmentId | string | Não | ID do apartamento do morador atual |
 | | loanedToApartmentLabel| string | Não | Identificação amigável (Apto + Bloco) |
+| | descricao | string | Não | Sinopse/Descrição detalhada (Metadata) |
+| | createdByUserId | string | Não | ID do administrador que registrou o livro |
+| | createdByUserEmail | string | Não | Email do administrador que registrou o livro |
+| | updatedByUserId | string | Não | ID do último administrador que editou o livro |
+| | updatedByUserEmail | string | Não | Email do último administrador que editou o livro |
+| **api_logs** | isbn | string | Sim | ISBN consultado |
+| | rawResponse | map | Sim | Dados brutos retornados pelas APIs (Google/OpenLibrary) |
+| | userId | string | Não | ID do usuário que realizou a busca |
+| | userEmail | string | Não | E-mail do usuário que realizou a busca |
+| | createdAt | timestamp | Sim | Data da consulta |
 | **book_loans** | bookId | string | Sim | ID do livro emprestado |
 | | apartmentId | string | Sim | Unidade responsável |
 | | borrowerUserId | string | Sim | UID do morador |

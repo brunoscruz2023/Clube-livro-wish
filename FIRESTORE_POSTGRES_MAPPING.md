@@ -43,9 +43,14 @@ Catálogo de livros físicos.
 | `barcode` | `barcode` | `TEXT` | Identificador opcional |
 | `status` | `status` | `TEXT` | ENUM: 'AVAILABLE', 'LOANED', 'INACTIVE' |
 | `availableLocationType` | `available_location_type` | `TEXT` | Categoria do local |
-| `availableLocationLabel`| `available_location_label_legacy` | `TEXT` | Descrição textual herdada |
+| `availableLocationLabel`| `available_location_label_legacy` | `TEXT` | Ex: "Hall Bloco A" ou "Apto 101 - Bloco A" |
 | `loanedToApartmentId` | `loaned_to_apartment_id` | `UUID` | FK para apartments |
 | `loanedToApartmentLabel`| `loaned_to_apartment_label` | `TEXT` | Nome amigável do destino |
+| `descricao` | `sinopse` | `TEXT` | Sinopse/Descrição (Metadata) |
+| `createdByUserId` | `created_by_user_id` | `TEXT` | Audit: Creator ID |
+| `createdByUserEmail` | `created_by_user_email` | `TEXT` | Audit: Creator Email |
+| `updatedByUserId` | `updated_by_user_id` | `TEXT` | Audit: Last Updater ID |
+| `updatedByUserEmail` | `updated_by_user_email` | `TEXT` | Audit: Last Updater Email |
 | `createdAt` | `created_at` | `TIMESTAMPTZ` | |
 | `updatedAt` | `updated_at` | `TIMESTAMPTZ` | |
 | **(NOVO)** | `condo_id` | `UUID` | FK para `condos` |
@@ -104,7 +109,19 @@ Pontos fixos de logística.
 
 ---
 
-## 7. Tabela: `condos` (Entidade de Raiz)
+## 7. Tabela: `api_logs` (Origem: `api_logs`)
+Registro de consultas a APIs externas de livros.
+
+| Campo Firestore | Coluna Postgres | Tipo Postgres | Transformação / Observação |
+| :--- | :--- | :--- | :--- |
+| `isbn` | `isbn` | `TEXT` | ISBN consultado |
+| `rawResponse` | `raw_response` | `JSONB` | Dados brutos da API |
+| `userId` | `profile_id` | `UUID` | FK para `profiles` |
+| `userEmail` | `user_email` | `TEXT` | Email (redundante para auditoria) |
+| `createdAt` | `created_at` | `TIMESTAMPTZ` | |
+| **(NOVO)** | `condo_id` | `UUID` | FK para `condos` |
+
+## 8. Tabela: `condos` (Entidade de Raiz)
 Tabela não existente no NoSQL como coleção explícita, mas necessária para o modelo TO-BE.
 
 | Coluna Postgres | Tipo Postgres | Observação |

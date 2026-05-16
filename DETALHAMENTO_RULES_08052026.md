@@ -31,6 +31,8 @@ As regras de segurança do "Clube do Livro" utilizam um modelo de **Identidade B
 ### Collection: `books`
 - **Read**: Todos os usuários autenticados.
 - **Write (Create/Delete)**: Restrito ao Administrador.
+- **Campos de Auditoria**: Durante a criação e edição, o sistema registra `createdByUserId`, `createdByUserEmail`, `updatedByUserId` e `updatedByUserEmail` para rastreabilidade administrativa.
+- **Metadata**: O campo `descricao` armazena a sinopse/detalhes da obra capturados via API durante o cadastro, sem exibição atual no front-end.
 - **Update**: 
   - Residentes podem atualizar exclusivamente os campos `status`, `availableLocationType`, `availableLocationLabel`, `loanedToApartmentId`, `loanedToApartmentLabel` e `updatedAt` durante o fluxo de empréstimo/devolução.
   - O sistema valida as transições de status permitidas: `AVAILABLE`, `LOANED` e `INACTIVE` (este último apenas via Admin).
@@ -79,4 +81,4 @@ Na migração para o ambiente relacional descrito no **Passo 5 do PRD**, as regr
 - **condoId**: Campo mestre de isolamento (Tenant ID) previsto no mapeamento de migração.
 
 ---
-*Revisado em: 11 de Maio de 2026 (Auditado para v2.3-canonical).*
+*Revisado em: 15 de Maio de 2026 (Auditado para v2.9-canonical e D-019).*
