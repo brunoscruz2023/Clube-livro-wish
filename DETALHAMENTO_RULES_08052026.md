@@ -49,11 +49,27 @@ As regras de segurança do "Clube do Livro" utilizam um modelo de **Identidade B
 - **Delete**: Apenas Administrador.
 
 ### Infraestrutura (`apartments`, `blocks`, `locations`)
-- **Read**: Todos os usuários autenticados.
+- **Read**: Usuários em processo de cadastro (limitado a campos públicos para seleção de unidade) e Usuários Ativos. Administradores têm leitura total.
 - **Write**: Exclusivo para Administradores.
 
 ### Integrações de Terceiros (Proxy via Backend)
 - **Books API**: As chaves de API para serviços externos (como Google Books) são mantidas estritamente no servidor. O acesso frontend é realizado via proxy (`/api/books/:isbn`), protegendo a `BOOKS_API_KEY` de exposição em rede pública.
+
+---
+
+## Detalhamento do Fluxos Específicos
+
+### 1) Verificação de ISBN e Duplicidade (Admin.tsx)
+- **Interceptação**: Toda busca (barcode ou manual) consulta o Firestore antes de APIs externas.
+- **State Management**: 
+  - `duplicateFound`: Armazena o registro existente para feedback visual.
+  - `lastScannedBook`: Buffer de metadados enriquecidos para o formulário.
+- **Double-Check**: Ao clicar em "SIM" no alerta de duplicidade, o sistema realiza uma consulta assíncrona síncrona (fresca) para garantir que o ISBN não tenha sido registrado pelo próprio Administrador logado nos milissegundos anteriores, prevenindo `race conditions`.
+
+### 2) Firebase Storage (Imagens de Capa)
+- **Caminho**: `book_covers/{filename}.jpg`.
+- **Bucket**: `gs://gen-lang-client-0243519410.firebasestorage.app`.
+- **Reflexo no Firestore**: O campo `coverUrl` prioriza o formato `gs://` para garantir portabilidade e integridade no processamento de imagens em backend futuro, mantendo a URL de download como buffer reativo.
 
 ---
 
@@ -63,6 +79,21 @@ As regras de segurança do "Clube do Livro" utilizam um modelo de **Identidade B
 2. **Afinação de Campos (affectedKeys)**: Uso rigoroso de `.diff(resource.data).affectedKeys().hasOnly([...])` para impedir a edição de campos imutáveis (como `loanedAt` ou `bookId`).
 3. **Integridade de Identidade**: O campo `borrowerUserId` deve coincidir obrigatoriamente com o `auth.uid` do requisitante.
 4. **Temporalidade Segura**: Datas de auditoria (`updatedAt`, `loanedAt`) devem utilizar obrigatoriamente `request.time` (Server Timestamp).
+
+---
+
+## Segurança do Storage (`storage.rules`)
+```javascript
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /book_covers/{allPaths=**} {
+      allow read: if true; // Aberto para visualização no catálogo
+      allow write: if request.auth != null; // Acesso via Storage SDK para usuários logados
+    }
+  }
+}
+```
 
 ---
 
@@ -81,4 +112,4 @@ Na migração para o ambiente relacional descrito no **Passo 5 do PRD**, as regr
 - **condoId**: Campo mestre de isolamento (Tenant ID) previsto no mapeamento de migração.
 
 ---
-*Revisado em: 17 de Maio de 2026 (Auditado para v2.16-canonical e D-022 - Refinamentos de Captura).*
+*Revisado em: 17 de Maio de 2026 (Auditado para v2.16-canonical e D-022 - Especificações de ISBN e Storage).*

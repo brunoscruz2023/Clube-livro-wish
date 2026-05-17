@@ -93,7 +93,12 @@ Entidades principais:
 5. **Casos de múltiplos resultados**: Interface de seleção com **Smart Merge**.
 6. **Livro não localizado**: Modal de alerta caso as APIs retornem vazio.
 7. O recurso de scanner é componenteizado.
-8. **Reset de Formulário**: Ao cancelar ou salvar, todos os campos (incluindo ISBN e seletores de local) são limpos para o próximo cadastro.
+8. **Scan Manual e Captura de Capa**: 
+    - Componente `CameraCapture.tsx` utiliza `navigator.mediaDevices`.
+    - **Especificação Técnica**: Cropping centralizado (Center Crop) em tempo de execução via Canvas API para garantir proporção **2:3** (ideal para livros), independentemente da resolução nativa da câmera do dispositivo.
+    - **Processamento**: Redimensionamento via `resizeImage` no `storageService.ts` para limites de 800x1000px antes do upload.
+    - **Persistência**: Armazenamento no Firebase Storage com URI canônica `gs://gen-lang-client-0243519410.firebasestorage.app/book_covers/`.
+9. **Reset de Formulário**: Ao cancelar ou salvar, todos os campos (incluindo ISBN e seletores de local) são limpos para o próximo cadastro.
 
 ---
 
@@ -107,6 +112,8 @@ Entidades principais:
 - Experiência do Catálogo: exibição dinâmica da unidade que está com o livro (Apto + Bloco) no lugar de label genérico.
 - Persistência de Dados: correção no fluxo de registro para garantir gravação do perfil no Firestore antes de qualquer logout.
 - Performance de Consultas: Admin carrega listas grandes ordenadas em memória para evitar erros de índice.
+- **Integridade de Capas**: Implementação de visual feedback reativo no formulário Admin, onde o campo `URL da Capa` é sincronizado via state `capturedCoverUrl` (preview) e `capturedGSPath` (database URI).
+- **Navigation & Permissions**: Atualização do `App.tsx` para garantir que o menu lateral apresente apenas as opções permitidas ao perfil do usuário (ocultando Admin para Residentes). Reforço das regras de segurança para garantir leitura de blocos/apartamentos durante o cadastro (etapa de pendência de aprovação).
 
 ---
 
