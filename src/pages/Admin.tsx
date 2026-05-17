@@ -35,13 +35,16 @@ import {
   ShieldAlert,
   ShieldCheck,
   ScanBarcode,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Camera
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { Location } from '../types';
 import { BarcodeScanner } from '../components/BarcodeScanner';
+import { CameraCapture } from '../components/CameraCapture';
 import { fetchBookDetailsByISBN, ExternalBookInfo } from '../services/bookDetails';
+import { uploadImage, resizeImage } from '../services/storageService';
 
 export function Admin() {
   const location = useLocation();
@@ -62,11 +65,15 @@ export function Admin() {
   const [showSeedConfirm, setShowSeedConfirm] = useState(false);
   const [showUserSeedConfirm, setShowUserSeedConfirm] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
+  const [isCapturingBack, setIsCapturingBack] = useState(false);
   const [fetchingBook, setFetchingBook] = useState(false);
   const [lastScannedBook, setLastScannedBook] = useState<any>(null);
   const [bookCandidates, setBookCandidates] = useState<ExternalBookInfo[]>([]);
   const [selectedLocationType, setSelectedLocationType] = useState<'HALL' | 'APARTMENT'>('HALL');
   const [isbnValue, setIsbnValue] = useState('');
+  const [capturedCoverUrl, setCapturedCoverUrl] = useState('');
+  const [capturedGSPath, setCapturedGSPath] = useState('');
   const [showNotFound, setShowNotFound] = useState(false);
   const [duplicateFound, setDuplicateFound] = useState<any | null>(null);
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
@@ -174,6 +181,9 @@ export function Admin() {
     setDuplicateFound(null);
     setIsBlockingDuplicate(false);
     setSelectedLocationType('HALL');
+    setShowCamera(false);
+    setIsCapturingBack(false);
+    setCapturedCoverUrl('');
     
     // Clear refs
     if (titleRef.current) titleRef.current.value = '';
@@ -355,10 +365,10 @@ export function Admin() {
     if (titleRef.current) titleRef.current.value = mergedInfo.title || '';
     if (authorRef.current) authorRef.current.value = Array.isArray(mergedInfo.author) ? mergedInfo.author.join(', ') : (mergedInfo.author || '');
     if (categoryRef.current) categoryRef.current.value = Array.isArray(mergedInfo.category) ? mergedInfo.category.join(', ') : (mergedInfo.category || '');
-    if (coverUrlRef.current) {
-      coverUrlRef.current.value = mergedInfo.coverUrl || '';
-      console.log(`[Admin] URL da capa definida (Smart Merge): ${mergedInfo.coverUrl}`);
-    }
+    
+    console.log(`[Admin] Sincronizando URL da capa (Smart Merge): ${mergedInfo.coverUrl}`);
+    setCapturedCoverUrl(mergedInfo.coverUrl || '');
+    
     if (barcodeRef.current && mergedInfo.isbn) {
       barcodeRef.current.value = mergedInfo.isbn;
       setIsbnValue(mergedInfo.isbn);
@@ -366,6 +376,38 @@ export function Admin() {
     
     setBookCandidates([]);
     console.log(`[Admin] Campos preenchidos com sucesso via Smart Merge.`);
+  };
+
+  const handleCaptureCover = async (dataUrl: string) => {
+    setShowCamera(false);
+    setSubmitting(true);
+    try {
+      const barcode = barcodeRef.current?.value || isbnValue || 'manual';
+      const timestamp = Date.now();
+      const fileName = isCapturingBack ? `back_${barcode}_${timestamp}.jpg` : `cover_${barcode}_${timestamp}.jpg`;
+      const path = `book_covers/${fileName}`;
+      
+      console.log(`[Admin] Processing captured image for ${path}...`);
+      const blob = await resizeImage(dataUrl, 800, 1000);
+      
+      console.log(`[Admin] Uploading to Storage...`);
+      const { downloadUrl, gsPath } = await uploadImage(blob, path);
+      
+      if (isCapturingBack) {
+        // Back cover logic if needed
+      } else {
+        console.log(`[Admin] Capture success! GS: ${gsPath}`);
+        setCapturedCoverUrl(downloadUrl);
+        setCapturedGSPath(gsPath);
+      }
+    } catch (err: any) {
+      console.error('[Admin] Error in capture process:', err);
+      const msg = err?.message || String(err);
+      alert(`Erro no processamento: ${msg}`);
+    } finally {
+      setSubmitting(false);
+      setIsCapturingBack(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -422,7 +464,7 @@ export function Admin() {
           author: authorValue,
           category: categoryValue,
           barcode: formData.get('barcode') as string,
-          coverUrl: formData.get('coverUrl') as string || '',
+          coverUrl: capturedGSPath || (formData.get('coverUrl') as string) || '', // Favor GS path if captured
           backCoverUrl: formData.get('backCoverUrl') as string || '',
           availableLocationType: formData.get('locationType') as string || 'HALL',
           availableLocationLabel: formData.get('locationLabel') as string || '',
@@ -434,6 +476,7 @@ export function Admin() {
           createdByUserId: auth.currentUser?.uid || null,
           createdByUserEmail: auth.currentUser?.email || null
         };
+        console.log('[Admin] Salvando livro com coverUrl:', newBook.coverUrl);
         await addDoc(collection(db, 'books'), newBook);
       } else if (activeTab === 'BLOCKS') {
         const newBlock = {
@@ -503,10 +546,11 @@ export function Admin() {
         updates.author = formData.get('author') as string;
         updates.category = formData.get('category') as string;
         updates.barcode = formData.get('barcode') as string;
-        updates.coverUrl = formData.get('coverUrl') as string || '';
+        updates.coverUrl = capturedGSPath || (formData.get('coverUrl') as string) || ''; // Favor GS path if captured
         updates.backCoverUrl = formData.get('backCoverUrl') as string || '';
         updates.availableLocationType = formData.get('locationType') as string;
         updates.availableLocationLabel = formData.get('locationLabel') as string;
+        console.log('[Admin] Atualizando livro com coverUrl:', updates.coverUrl);
       } else if (activeTab === 'BLOCKS') {
         updates.name = formData.get('name') as string;
       } else if (activeTab === 'APARTMENTS') {
@@ -650,7 +694,7 @@ export function Admin() {
                             author: authorValue,
                             category: categoryValue,
                             barcode,
-                            coverUrl: coverUrlRef.current?.value || (lastScannedBook?.coverUrl || ''),
+                            coverUrl: capturedCoverUrl || (lastScannedBook?.coverUrl || ''),
                             backCoverUrl: '',
                             availableLocationType: locationTypeSelect?.value || 'HALL',
                             availableLocationLabel: locationLabelSelect?.value || '',
@@ -736,6 +780,15 @@ export function Admin() {
           onClose={() => setShowScanner(false)} 
         />
       )}
+
+      <AnimatePresence>
+        {showCamera && (
+          <CameraCapture 
+            onCapture={handleCaptureCover}
+            onClose={() => setShowCamera(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Book Candidate Selector Modal */}
       <AnimatePresence>
@@ -981,9 +1034,35 @@ export function Admin() {
                       onChange={(e) => setIsbnValue(e.target.value)}
                     />
                     
-                    <div className="relative">
-                      <ImageIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-                      <input ref={coverUrlRef} name="coverUrl" placeholder="URL da Capa" className="w-full rounded-lg border border-slate-200 p-2 pl-9 text-sm bg-white" />
+                    <div className="relative flex gap-2">
+                      <div className="relative flex-1">
+                        <ImageIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+                        <input 
+                          name="coverUrl" 
+                          placeholder="URL da Capa" 
+                          className="w-full rounded-lg border border-slate-200 p-2 pl-9 text-sm bg-white"
+                          value={capturedGSPath || capturedCoverUrl}
+                          onChange={(e) => {
+                            if (e.target.value.startsWith('gs://')) {
+                              setCapturedGSPath(e.target.value);
+                            } else {
+                              setCapturedCoverUrl(e.target.value);
+                              setCapturedGSPath('');
+                            }
+                          }}
+                        />
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setIsCapturingBack(false);
+                          setShowCamera(true);
+                        }}
+                        className="flex items-center justify-center rounded-lg bg-slate-100 p-2 text-slate-600 hover:bg-slate-200"
+                        title="Tirar Foto da Capa"
+                      >
+                        <Camera className="h-5 w-5" />
+                      </button>
                     </div>
                     <div className="relative">
                       <ImageIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400 opacity-50" />
@@ -1085,7 +1164,36 @@ export function Admin() {
                     <input name="author" defaultValue={isEditing.author} placeholder="Autor" required className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
                     <input name="category" defaultValue={isEditing.category} placeholder="Categoria" className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
                     <input name="barcode" defaultValue={isEditing.barcode} placeholder="ISBN" className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
-                    <input name="coverUrl" defaultValue={isEditing.coverUrl} placeholder="URL da Capa" className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
+                    <div className="relative flex gap-2">
+                       <div className="relative flex-1">
+                         <ImageIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+                         <input 
+                           name="coverUrl" 
+                           placeholder="URL da Capa" 
+                           className="w-full rounded-lg border border-slate-200 p-2 pl-9 text-sm bg-white" 
+                           value={capturedGSPath || capturedCoverUrl}
+                           onChange={(e) => {
+                             if (e.target.value.startsWith('gs://')) {
+                               setCapturedGSPath(e.target.value);
+                             } else {
+                               setCapturedCoverUrl(e.target.value);
+                               setCapturedGSPath('');
+                             }
+                           }}
+                         />
+                       </div>
+                       <button 
+                         type="button"
+                         onClick={() => {
+                           setIsCapturingBack(false);
+                           setShowCamera(true);
+                         }}
+                         className="flex items-center justify-center rounded-lg bg-slate-100 p-2 text-slate-600 hover:bg-slate-200"
+                         title="Tirar Foto da Capa"
+                       >
+                         <Camera className="h-5 w-5" />
+                       </button>
+                    </div>
                     <input name="backCoverUrl" defaultValue={isEditing.backCoverUrl} placeholder="URL da Contracapa" className="rounded-lg border border-slate-200 p-2 text-sm bg-white" />
                     
                     <select 
@@ -1278,6 +1386,7 @@ export function Admin() {
                            setIsEditing(item);
                            setShowAddForm(false);
                            setSelectedLocationType(item.availableLocationType || 'HALL');
+                           setCapturedCoverUrl(item.coverUrl || '');
                          }}
                          className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-indigo-600 group-hover:shadow-sm transition-all"
                        >

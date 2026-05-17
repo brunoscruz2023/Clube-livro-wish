@@ -1,9 +1,11 @@
 # Documento de Design, Sistema de Biblioteca Comunitária (FONTE DE VERDADE DO DOMÍNIO)
 Doc-ID: DESIGN-BOOKCLUB
-Versão: v1.21
+Versão: v1.22
 Atualizado em: 2026-05-17
 
 ## Changelog
+- v1.23: implementada sincronização reativa de coverUrl via state, corrigido bug de referência no Smart Merge e refinada interface de captura com guia 2:3.
+- v1.22: refinada interface de captura de capa com guias visuais, correção do fluxo de repetição (retake) e persistência reativa no formulário.
 - v1.21: reforçada a validação de duplicidade com "double-check" no clique do botão "SIM" para garantir bloqueio de ISBN próprio.
 - v1.20: reforçada a integridade de dados com validação de duplicidade de ISBN no servidor (`handleSubmit`) e bloqueio preventivo na busca.
 - v1.19: refinado controle de duplicidade de ISBN: o botão "SIM" agora realiza o cadastro automático se validado; o botão "NÃO" limpa o formulário integralmente.
