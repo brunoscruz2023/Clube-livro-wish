@@ -1,9 +1,14 @@
 # Documento de Design, Sistema de Biblioteca Comunitária (FONTE DE VERDADE DO DOMÍNIO)
 Doc-ID: DESIGN-BOOKCLUB
-Versão: v1.16
-Atualizado em: 2026-05-15
+Versão: v1.21
+Atualizado em: 2026-05-17
 
 ## Changelog
+- v1.21: reforçada a validação de duplicidade com "double-check" no clique do botão "SIM" para garantir bloqueio de ISBN próprio.
+- v1.20: reforçada a integridade de dados com validação de duplicidade de ISBN no servidor (`handleSubmit`) e bloqueio preventivo na busca.
+- v1.19: refinado controle de duplicidade de ISBN: o botão "SIM" agora realiza o cadastro automático se validado; o botão "NÃO" limpa o formulário integralmente.
+- v1.18: implementado controle de duplicidade de ISBN no cadastro com interceptação de busca local e restrição de uma cópia por usuário.
+- v1.17: restaurada a gravação de logs de API (`api_logs`) para auditoria e enriquecimento de metadados.
 - v1.16: encerrado processo de backfill automático; campo `descricao` agora é populado obrigatoriamente durante o cadastro inicial via metadados de API.
 - v1.15: implementada captura automática de descrição (campo `descricao`) de livros via metadados de API.
 - v1.14: refinada hierarquia de locais com prefixo "Hall " automático e lógica de reset de formulário no Admin.

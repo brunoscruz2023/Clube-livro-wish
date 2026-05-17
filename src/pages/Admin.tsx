@@ -68,6 +68,9 @@ export function Admin() {
   const [selectedLocationType, setSelectedLocationType] = useState<'HALL' | 'APARTMENT'>('HALL');
   const [isbnValue, setIsbnValue] = useState('');
   const [showNotFound, setShowNotFound] = useState(false);
+  const [duplicateFound, setDuplicateFound] = useState<any | null>(null);
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [isBlockingDuplicate, setIsBlockingDuplicate] = useState(false);
 
   // Refs for Add Book form to allow programmatic filling
   const titleRef = React.useRef<HTMLInputElement>(null);
@@ -168,7 +171,16 @@ export function Admin() {
     setIsbnValue('');
     setLastScannedBook(null);
     setBookCandidates([]);
+    setDuplicateFound(null);
+    setIsBlockingDuplicate(false);
     setSelectedLocationType('HALL');
+    
+    // Clear refs
+    if (titleRef.current) titleRef.current.value = '';
+    if (authorRef.current) authorRef.current.value = '';
+    if (categoryRef.current) categoryRef.current.value = '';
+    if (barcodeRef.current) barcodeRef.current.value = '';
+    if (coverUrlRef.current) coverUrlRef.current.value = '';
   };
 
   const handleSeedData = async () => {
@@ -246,15 +258,52 @@ export function Admin() {
     setShowScanner(false);
     setFetchingBook(true);
     setBookCandidates([]);
+    setDuplicateFound(null);
+    setIsBlockingDuplicate(false);
     
     // Fill barcode field
     if (barcodeRef.current) {
       barcodeRef.current.value = barcode;
     }
+    setIsbnValue(barcode);
 
     try {
+      // 1. Intercept: Search local Firestore first
+      const q = query(collection(db, 'books'), where('barcode', '==', barcode), where('active', '==', true));
+      const snapshot = await getDocs(q);
+      
+      if (!snapshot.empty) {
+        const books = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+        const myCopy = books.find((b: any) => b.createdByUserId === auth.currentUser?.uid);
+        
+        console.log(`[Admin] Obra já existente na base local: ${barcode}. Preenchendo formulário.`);
+        
+        // 1. Fill form immediately with local data
+        applyBookInfo({
+          title: books[0].title,
+          author: books[0].author,
+          category: books[0].category,
+          description: books[0].descricao || '',
+          isbn: barcode,
+          coverUrl: books[0].coverUrl || ''
+        });
+
+        // 2. Show modal with appropriate state
+        setDuplicateFound(books);
+        if (myCopy) {
+          console.log(`[Admin] Bloqueio imediato: Usuário já possui uma cópia deste ISBN.`);
+          setIsBlockingDuplicate(true);
+        } else {
+          setIsBlockingDuplicate(false);
+        }
+        setShowDuplicateModal(true);
+        setFetchingBook(false);
+        return;
+      }
+
+      // 2. If not found locally, fetch from external APIs
       const candidates = await fetchBookDetailsByISBN(barcode);
-      console.log(`[Admin] Resultado da busca:`, candidates);
+      console.log(`[Admin] Resultado da busca externa:`, candidates);
 
       if (candidates && candidates.length > 0) {
         if (candidates.length === 1) {
@@ -280,22 +329,25 @@ export function Admin() {
     // Smart Merge: Se campos estiverem vazios na seleção atual, busca nos outros candidatos
     const mergedInfo = { ...info };
     
-    bookCandidates.forEach(candidate => {
-      if (!mergedInfo.title && candidate.title) mergedInfo.title = candidate.title;
-      
-      const isAuthorEmpty = !mergedInfo.author || (Array.isArray(mergedInfo.author) && mergedInfo.author.length === 0);
-      if (isAuthorEmpty && candidate.author && (!Array.isArray(candidate.author) || candidate.author.length > 0)) {
-        mergedInfo.author = candidate.author;
-      }
-      
-      const isCategoryEmpty = !mergedInfo.category || (Array.isArray(mergedInfo.category) && mergedInfo.category.length === 0);
-      if (isCategoryEmpty && candidate.category && (!Array.isArray(candidate.category) || candidate.category.length > 0)) {
-        mergedInfo.category = candidate.category;
-      }
-      
-      if (!mergedInfo.description && candidate.description) mergedInfo.description = candidate.description;
-      if (!mergedInfo.coverUrl && candidate.coverUrl) mergedInfo.coverUrl = candidate.coverUrl;
-    });
+    // If we have candidates, merged them. If not (base local), just use info.
+    if (bookCandidates.length > 0) {
+      bookCandidates.forEach(candidate => {
+        if (!mergedInfo.title && candidate.title) mergedInfo.title = candidate.title;
+        
+        const isAuthorEmpty = !mergedInfo.author || (Array.isArray(mergedInfo.author) && mergedInfo.author.length === 0);
+        if (isAuthorEmpty && candidate.author && (!Array.isArray(candidate.author) || candidate.author.length > 0)) {
+          mergedInfo.author = candidate.author;
+        }
+        
+        const isCategoryEmpty = !mergedInfo.category || (Array.isArray(mergedInfo.category) && mergedInfo.category.length === 0);
+        if (isCategoryEmpty && candidate.category && (!Array.isArray(candidate.category) || candidate.category.length > 0)) {
+          mergedInfo.category = candidate.category;
+        }
+        
+        if (!mergedInfo.description && candidate.description) mergedInfo.description = candidate.description;
+        if (!mergedInfo.coverUrl && candidate.coverUrl) mergedInfo.coverUrl = candidate.coverUrl;
+      });
+    }
 
     setLastScannedBook(mergedInfo);
     
@@ -329,6 +381,25 @@ export function Admin() {
         const title = formData.get('title') as string;
         const authorInput = formData.get('author') as string;
         const categoryInput = formData.get('category') as string;
+        const barcode = formData.get('barcode') as string;
+
+        // Security check for self-duplicates (even if typed manually)
+        if (barcode && auth.currentUser) {
+          const q = query(
+            collection(db, 'books'), 
+            where('barcode', '==', barcode), 
+            where('createdByUserId', '==', auth.currentUser.uid),
+            where('active', '==', true)
+          );
+          const snapshot = await getDocs(q);
+          if (!snapshot.empty) {
+            console.log(`[Admin] Tentativa de cadastro bloqueada: ISBN duplicado para o mesmo usuário.`);
+            setIsBlockingDuplicate(true);
+            setShowDuplicateModal(true);
+            setSubmitting(false);
+            return;
+          }
+        }
 
         // Restore original structure if not modified
         let authorValue: any = authorInput;
@@ -482,6 +553,151 @@ export function Admin() {
 
   return (
     <div className="space-y-8">
+      {/* Duplicate Found Modal */}
+      <AnimatePresence>
+        {showDuplicateModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-2xl text-center"
+            >
+              {isBlockingDuplicate ? (
+                <>
+                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+                    <ShieldAlert className="h-8 w-8" />
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900">Limite de Registro</h3>
+                  <p className="mt-2 text-slate-500">
+                    Você já cadastrou uma cópia deste livro e não pode cadastrar duplicatas de um mesmo ISBN sob sua conta.
+                  </p>
+                  <button 
+                    type="button"
+                    onClick={() => {
+                        setShowDuplicateModal(false);
+                        closeAddForm();
+                    }}
+                    className="mt-6 w-full rounded-xl bg-slate-900 py-3 font-bold text-white transition-all hover:bg-slate-800"
+                  >
+                    Entendido
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">
+                    <Check className="h-8 w-8" />
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900">Obra já existente</h3>
+                  <p className="mt-2 text-slate-500">
+                    Deseja cadastrar outra cópia deste livro?
+                  </p>
+                  <div className="mt-6 grid grid-cols-2 gap-3">
+                    <button 
+                      type="button"
+                      onClick={async () => {
+                        const barcode = barcodeRef.current?.value || isbnValue || '';
+                        
+                        if (!auth.currentUser) {
+                          console.error('[Admin] Usuário não autenticado ao tentar duplicar.');
+                          return;
+                        }
+
+                        setSubmitting(true);
+                        try {
+                          // 1. Verificação de segurança (FRESH) no momento do clique "SIM"
+                          const q = query(
+                            collection(db, 'books'), 
+                            where('barcode', '==', barcode), 
+                            where('createdByUserId', '==', auth.currentUser.uid),
+                            where('active', '==', true)
+                          );
+                          const snapDuplicate = await getDocs(q);
+
+                          if (!snapDuplicate.empty) {
+                            console.log(`[Admin] Bloqueio via clique SIM: ISBN já cadastrado para este usuário.`);
+                            setIsBlockingDuplicate(true);
+                            setSubmitting(false);
+                            return;
+                          }
+
+                          // 2. Não há duplicata do próprio usuário, prossegue com o cadastro
+                          const title = titleRef.current?.value || '';
+                          const authorInput = authorRef.current?.value || '';
+                          const categoryInput = categoryRef.current?.value || '';
+                          
+                          // Restore original structure for arrays if mapped correctly
+                          let authorValue: any = authorInput;
+                          let categoryValue: any = categoryInput;
+                          if (lastScannedBook) {
+                            const originalAuthorString = Array.isArray(lastScannedBook.author) ? lastScannedBook.author.join(', ') : lastScannedBook.author;
+                            if (authorInput === originalAuthorString) authorValue = lastScannedBook.author;
+                            
+                            const originalCategoryString = Array.isArray(lastScannedBook.category) ? lastScannedBook.category.join(', ') : lastScannedBook.category;
+                            if (categoryInput === originalCategoryString) categoryValue = lastScannedBook.category;
+                          }
+
+                          // Get location from the visible select elements
+                          const locationTypeSelect = document.getElementsByName('locationType')[0] as HTMLSelectElement;
+                          const locationLabelSelect = document.getElementsByName('locationLabel')[0] as HTMLSelectElement;
+
+                          const newBook = {
+                            title,
+                            author: authorValue,
+                            category: categoryValue,
+                            barcode,
+                            coverUrl: coverUrlRef.current?.value || (lastScannedBook?.coverUrl || ''),
+                            backCoverUrl: '',
+                            availableLocationType: locationTypeSelect?.value || 'HALL',
+                            availableLocationLabel: locationLabelSelect?.value || '',
+                            descricao: lastScannedBook?.description || (duplicateFound?.[0]?.descricao || ''),
+                            status: 'AVAILABLE',
+                            active: true,
+                            createdAt: serverTimestamp(),
+                            updatedAt: serverTimestamp(),
+                            createdByUserId: auth.currentUser?.uid || null,
+                            createdByUserEmail: auth.currentUser?.email || null
+                          };
+
+                          await addDoc(collection(db, 'books'), newBook);
+                          setShowDuplicateModal(false);
+                          closeAddForm();
+                          loadData();
+                        } catch (error) {
+                          console.error('[Admin] Erro ao cadastrar duplicata:', error);
+                          handleFirestoreError(error, OperationType.WRITE, 'books');
+                        } finally {
+                          setSubmitting(false);
+                        }
+                      }}
+                      disabled={submitting}
+                      className="rounded-xl bg-indigo-600 py-3 font-bold text-white transition-all hover:bg-indigo-700 shadow-md flex items-center justify-center gap-2"
+                    >
+                      {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                      SIM
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setShowDuplicateModal(false);
+                        closeAddForm();
+                      }}
+                      className="rounded-xl border border-slate-200 bg-white py-3 font-bold text-slate-600 transition-all hover:bg-slate-50"
+                    >
+                      NÃO
+                    </button>
+                  </div>
+                </>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Not Found Modal */}
       <AnimatePresence>
         {showNotFound && (

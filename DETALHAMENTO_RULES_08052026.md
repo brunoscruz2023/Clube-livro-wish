@@ -81,4 +81,4 @@ Na migração para o ambiente relacional descrito no **Passo 5 do PRD**, as regr
 - **condoId**: Campo mestre de isolamento (Tenant ID) previsto no mapeamento de migração.
 
 ---
-*Revisado em: 15 de Maio de 2026 (Auditado para v2.9-canonical e D-019).*
+*Revisado em: 17 de Maio de 2026 (Auditado para v2.14-canonical e D-021).*
