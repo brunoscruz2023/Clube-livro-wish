@@ -66,3 +66,27 @@ This report details the necessary changes to synchronize the application's code 
     2.  **Service Logic:** Implement `uploadBookCover(file: Blob)`. It must call `uploadBytes` and `getDownloadURL`.
     3.  **Return Data:** The function must return an object: `{ downloadURL, gsPath: "gs://gen-lang-client-0243519410.firebasestorage.app/" + fileRef.fullPath }`.
         *Technical Why:* The `gsPath` is the permanent cloud identifier used for internal audit and cross-environment sync.
+
+---
+
+### **Point 5: Resident Book Management & "Soft Delete" Logic**
+
+*   **How?**
+    Allow all active users to contribute to the library by exposing the recording interface to Residents. Implement "Soft Delete" so that when a Resident "removes" a book, it simply becomes `active: false`, keeping the record intact for Administrative history and audit.
+*   **What codes will be changed?**
+    `src/App.tsx`, `src/pages/Admin.tsx`, and `firestore.rules`
+*   **What changes will be done for each code?**
+    1.  **Menu & Navigation (`src/App.tsx` Line 83):**
+        Add "Adicionar Livro" to the navigation for all active users. Residents should be directed to the `/admin` path but with a filtered view.
+    2.  **Row-Level Filtering (`src/pages/Admin.tsx` Line 135):**
+        In `loadData()`, if the user is a `RESIDENT`, add a filter to the query: `where('createdByUserId', '==', auth.currentUser.uid)`.
+        *Technical Why:* Ensures residents only see and manage books they personally recorded.
+    3.  **Soft Delete Implementation (`src/pages/Admin.tsx` Line 1294):**
+        Change the delete action for Residents. Instead of calling `deleteDoc`, it must call `updateDoc(doc(db, 'books', item.id), { active: false })`.
+        *Technical Why:* This satisfies the "don't delete history" requirement. The book disappears from the Catalog and the Resident's list but remains in the database for Admin review.
+    4.  **Security Enforcement (`firestore.rules` Line 106):**
+        Update `update` and `delete` rules for the `books` collection:
+        ```javascript
+        allow update, delete: if isAdmin() || (isSignedIn() && resource.data.createdByUserId == request.auth.uid);
+        ```
+        *Technical Why:* Prevents a resident from accidentally or maliciously editing or removing a book that belongs to another user.
