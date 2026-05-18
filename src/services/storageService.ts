@@ -27,6 +27,11 @@ export async function uploadImage(blob: Blob, path: string): Promise<{ downloadU
     console.error('[StorageService] Error in uploadImage:', error);
     const errorCode = error?.code || 'unknown';
     const errorMessage = error?.message || String(error);
+    
+    if (errorCode === 'storage/unauthorized') {
+      throw new Error(`Acesso negado ao Storage. Verifique se as Rules no console permitem 'write' para usuários autenticados.`);
+    }
+    
     throw new Error(`Upload failed (${errorCode}): ${errorMessage}`);
   }
 }

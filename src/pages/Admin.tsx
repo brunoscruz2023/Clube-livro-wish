@@ -15,7 +15,8 @@ import {
   orderBy,
   writeBatch
 } from 'firebase/firestore';
-import { db, handleFirestoreError, auth } from '../lib/firebase';
+import { auth, db, handleFirestoreError } from '../lib/firebase';
+import { useAuth } from '../hooks/useAuth';
 import { 
   Search,
   Settings, 
@@ -47,6 +48,7 @@ import { fetchBookDetailsByISBN, ExternalBookInfo } from '../services/bookDetail
 import { uploadImage, resizeImage } from '../services/storageService';
 
 export function Admin() {
+  const { user } = useAuth();
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const initialAction = searchParams.get('action');
@@ -150,11 +152,25 @@ export function Admin() {
     };
     const path = pathMap[activeTab];
     try {
-      // Remove all orderBy for now to avoid potential missing index issues
-      // as the user is reporting that data is not appearing.
-      const q = query(collection(db, path));
+      let q;
+      if (activeTab === 'BOOKS' && user?.role !== 'ADMIN') {
+        // Simplified query to avoid composite index requirement
+        // We filter 'active' in memory
+        q = query(
+          collection(db, path), 
+          where('createdByUserId', '==', auth.currentUser?.uid)
+        );
+      } else {
+        q = query(collection(db, path));
+      }
+      
       const snapshot = await getDocs(q);
-      const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
+      let items = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as object) } as any));
+      
+      // Memory filter for non-admin books
+      if (activeTab === 'BOOKS' && user?.role !== 'ADMIN') {
+        items = items.filter((item: any) => item.active === true);
+      }
       
       // Sort in memory if needed
       if (activeTab === 'BOOKS') {
@@ -167,10 +183,12 @@ export function Admin() {
       
       setData(items);
     } catch (error) {
-      handleFirestoreError(error, OperationType.GET, path);
+      console.error('[Admin] loadData failed:', error);
       setData([]);
+      // Don't re-throw here to allow setLoading(false) to run
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   const closeAddForm = () => {
@@ -427,14 +445,18 @@ export function Admin() {
 
         // Security check for self-duplicates (even if typed manually)
         if (barcode && auth.currentUser) {
+          // Query ONLY by barcode to avoid composite index requirement
           const q = query(
             collection(db, 'books'), 
-            where('barcode', '==', barcode), 
-            where('createdByUserId', '==', auth.currentUser.uid),
-            where('active', '==', true)
+            where('barcode', '==', barcode)
           );
           const snapshot = await getDocs(q);
-          if (!snapshot.empty) {
+          const duplicates = snapshot.docs.filter(d => {
+            const data = d.data();
+            return data.createdByUserId === auth.currentUser?.uid && data.active === true;
+          });
+          
+          if (duplicates.length > 0) {
             console.log(`[Admin] Tentativa de cadastro bloqueada: ISBN duplicado para o mesmo usuário.`);
             setIsBlockingDuplicate(true);
             setShowDuplicateModal(true);
@@ -450,24 +472,24 @@ export function Admin() {
         if (lastScannedBook) {
           const originalAuthorString = Array.isArray(lastScannedBook.author) ? lastScannedBook.author.join(', ') : lastScannedBook.author;
           if (authorInput === originalAuthorString) {
-            authorValue = lastScannedBook.author;
+            authorValue = Array.isArray(lastScannedBook.author) ? lastScannedBook.author : [lastScannedBook.author];
           }
 
           const originalCategoryString = Array.isArray(lastScannedBook.category) ? lastScannedBook.category.join(', ') : lastScannedBook.category;
           if (categoryInput === originalCategoryString) {
-            categoryValue = lastScannedBook.category;
+            categoryValue = Array.isArray(lastScannedBook.category) ? lastScannedBook.category : [lastScannedBook.category];
           }
         }
 
         const newBook = {
           title,
-          author: authorValue,
-          category: categoryValue,
-          barcode: formData.get('barcode') as string,
-          coverUrl: capturedGSPath || (formData.get('coverUrl') as string) || '', // Favor GS path if captured
-          backCoverUrl: formData.get('backCoverUrl') as string || '',
-          availableLocationType: formData.get('locationType') as string || 'HALL',
-          availableLocationLabel: formData.get('locationLabel') as string || '',
+          author: authorValue || '',
+          category: categoryValue || '',
+          barcode: (formData.get('barcode') as string) || '',
+          coverUrl: capturedGSPath || (formData.get('coverUrl') as string) || '', 
+          backCoverUrl: (formData.get('backCoverUrl') as string) || '',
+          availableLocationType: (formData.get('locationType') as string) || 'HALL',
+          availableLocationLabel: (formData.get('locationLabel') as string) || '',
           descricao: lastScannedBook?.description || '',
           status: 'AVAILABLE',
           active: true,
@@ -476,7 +498,7 @@ export function Admin() {
           createdByUserId: auth.currentUser?.uid || null,
           createdByUserEmail: auth.currentUser?.email || null
         };
-        console.log('[Admin] Salvando livro com coverUrl:', newBook.coverUrl);
+        console.log('[Admin] Salvando novo livro:', JSON.stringify({ ...newBook, createdAt: 'TIMESTAMP', updatedAt: 'TIMESTAMP' }));
         await addDoc(collection(db, 'books'), newBook);
       } else if (activeTab === 'BLOCKS') {
         const newBlock = {
@@ -519,7 +541,10 @@ export function Admin() {
 
       closeAddForm();
       loadData();
-    } catch (error) {
+    } catch (error: any) {
+       console.error('[Admin] Error in handleSubmit:', error);
+       const errorMsg = error instanceof Error ? error.message : String(error);
+       alert(`Erro ao salvar: ${errorMsg}`);
        handleFirestoreError(error, OperationType.WRITE, collectionName);
     } finally {
       setSubmitting(false);
@@ -567,7 +592,10 @@ export function Admin() {
       await updateDoc(doc(db, collectionName, isEditing.id), updates);
       setIsEditing(null);
       loadData();
-    } catch (error) {
+    } catch (error: any) {
+       console.error('[Admin] Error in handleUpdate:', error);
+       const errorMsg = error instanceof Error ? error.message : String(error);
+       alert(`Erro ao atualizar: ${errorMsg}`);
        handleFirestoreError(error, OperationType.UPDATE, collectionName);
     } finally {
       setSubmitting(false);
@@ -679,10 +707,14 @@ export function Admin() {
                           let categoryValue: any = categoryInput;
                           if (lastScannedBook) {
                             const originalAuthorString = Array.isArray(lastScannedBook.author) ? lastScannedBook.author.join(', ') : lastScannedBook.author;
-                            if (authorInput === originalAuthorString) authorValue = lastScannedBook.author;
+                            if (authorInput === originalAuthorString) {
+                              authorValue = Array.isArray(lastScannedBook.author) ? lastScannedBook.author : [lastScannedBook.author];
+                            }
                             
                             const originalCategoryString = Array.isArray(lastScannedBook.category) ? lastScannedBook.category.join(', ') : lastScannedBook.category;
-                            if (categoryInput === originalCategoryString) categoryValue = lastScannedBook.category;
+                            if (categoryInput === originalCategoryString) {
+                              categoryValue = Array.isArray(lastScannedBook.category) ? lastScannedBook.category : [lastScannedBook.category];
+                            }
                           }
 
                           // Get location from the visible select elements
@@ -1400,7 +1432,15 @@ export function Admin() {
                                setDeleteConfirmId(null);
                                const collectionName = activeTab.toLowerCase();
                                try {
-                                 await deleteDoc(doc(db, collectionName, item.id));
+                                 if (activeTab === 'BOOKS') {
+                                   await updateDoc(doc(db, collectionName, item.id), { 
+                                     active: false,
+                                     updatedAt: serverTimestamp(),
+                                     deletedByUserId: auth.currentUser?.uid || null
+                                   });
+                                 } else {
+                                   await deleteDoc(doc(db, collectionName, item.id));
+                                 }
                                  await loadData();
                                } catch (err) {
                                  handleFirestoreError(err, OperationType.DELETE, `${collectionName}/${item.id}`);

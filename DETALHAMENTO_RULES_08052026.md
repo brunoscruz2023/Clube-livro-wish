@@ -69,7 +69,8 @@ As regras de segurança do "Clube do Livro" utilizam um modelo de **Identidade B
 ### 2) Firebase Storage (Imagens de Capa)
 - **Caminho**: `book_covers/{filename}.jpg`.
 - **Bucket**: `gs://gen-lang-client-0243519410.firebasestorage.app`.
-- **Reflexo no Firestore**: O campo `coverUrl` prioriza o formato `gs://` para garantir portabilidade e integridade no processamento de imagens em backend futuro, mantendo a URL de download como buffer reativo.
+- **Reflexo no Firestore**: O campo `coverUrl` prioriza o formato `gs://` para garantir portabilidade. O preview reativo usa a URL de download.
+- **Permissões**: O bucket exige `allow write: if request.auth != null`.
 
 ---
 

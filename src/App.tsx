@@ -84,7 +84,8 @@ function Shell({ children }: { children: React.ReactNode }) {
     { label: 'Catálogo', path: '/', icon: Library },
     { label: 'Meus Empréstimos', path: '/loans', icon: Clock },
     { label: 'Perfil', path: '/profile', icon: UserIcon },
-    ...(user?.role === 'ADMIN' ? [{ label: 'Admin', path: '/admin', icon: Settings }] : []),
+    ...(user?.role !== 'ADMIN' ? [{ label: 'Adicionar Livro', path: '/admin?action=new-book', icon: Plus }] : []),
+    ...(user?.role === 'ADMIN' ? [{ label: 'Gerenciar', path: '/admin', icon: Settings }] : []),
   ];
 
   const displayName = user?.name && user.name !== 'Morador' ? user.name : 'Configurar Perfil';
@@ -460,7 +461,7 @@ export default function App() {
             <Route path="/" element={<PrivateRoute><Catalog /></PrivateRoute>} />
             <Route path="/loans" element={<PrivateRoute><MyLoans /></PrivateRoute>} />
             <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
-            <Route path="/admin" element={<PrivateRoute adminOnly><Admin /></PrivateRoute>} />
+            <Route path="/admin" element={<PrivateRoute><Admin /></PrivateRoute>} />
           </Routes>
         </Router>
       </InAppBrowserGuard>
